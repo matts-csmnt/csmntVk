@@ -45,6 +45,10 @@ struct QueueFamilyIndices {
 class csmntVkApplication {
 public:
 	csmntVkApplication(int, int);
+	~csmntVkApplication() {};
+
+	csmntVkApplication(csmntVkApplication&) = delete;
+	csmntVkApplication& operator=(const csmntVkApplication&) = delete;
 
 	void run();
 	void mainLoop();
@@ -53,12 +57,16 @@ public:
 private:
 	void initVulkan();
 	void initWindow();
-	std::vector<const char*> getRequiredExtensions();
 	bool checkValidationLayerSupport();
 	void setupDebugMessenger();
 	void createVkInstance();
+	
 	void pickPhysicalDevice();
 	bool isDeviceSuitable(VkPhysicalDevice);
+	
+	void createLogicalDevice();
+
+	std::vector<const char*> getRequiredExtensions();
 	QueueFamilyIndices findQueueFamilies(VkPhysicalDevice);
 
 	static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
@@ -70,10 +78,12 @@ private:
 	//Window Height & Width (800 x 600 default)
 	int m_winH = 600, m_winW = 800;
 
-	GLFWwindow* m_pWindow;
-	VkInstance	m_vkInstance;
-	VkDebugUtilsMessengerEXT m_debugMessenger;
-	VkPhysicalDevice m_physicalDevice = VK_NULL_HANDLE;	//GFX card
+	GLFWwindow*					m_pWindow;
+	VkInstance					m_vkInstance;
+	VkDebugUtilsMessengerEXT	m_debugMessenger;
+	VkPhysicalDevice			m_vkPhysicalDevice = VK_NULL_HANDLE;	//GFX card
+	VkDevice					m_vkDevice;
+	VkQueue						m_vkGraphicsQueue;
 
 	//Validation Layers
 	std::vector<const char*> m_validationLayers;

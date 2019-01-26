@@ -17,7 +17,7 @@ int main() {
 	p_application->run();
 
 	//cleanup
-	if (p_application != nullptr)
+	if (p_application)
 	{
 		delete p_application;
 		p_application = nullptr;

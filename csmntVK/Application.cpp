@@ -32,6 +32,8 @@ void csmntVkApplication::mainLoop()
 
 void csmntVkApplication::shutdown()
 {
+	vkDestroyDevice(m_vkDevice, nullptr);
+
 	if (m_enableValidationLayers) {
 		DestroyDebugUtilsMessengerEXT(m_vkInstance, m_debugMessenger, nullptr);
 	}
@@ -45,8 +47,15 @@ void csmntVkApplication::shutdown()
 
 void csmntVkApplication::initVulkan()
 {
+	//Create instance and debug callbacks
 	createVkInstance();
 	setupDebugMessenger();
+
+	//Pick a GFX card
+	pickPhysicalDevice();
+
+	//Create Logical device to interface with GFX card
+	createLogicalDevice();
 }
 
 void csmntVkApplication::initWindow()
@@ -201,12 +210,12 @@ void csmntVkApplication::pickPhysicalDevice()
 	//Check our devices are suitable
 	for (const auto& device : devices) {
 		if (isDeviceSuitable(device)) {
-			m_physicalDevice = device;
+			m_vkPhysicalDevice = device;
 			break;
 		}
 	}
 
-	if (m_physicalDevice == VK_NULL_HANDLE) {
+	if (m_vkPhysicalDevice == VK_NULL_HANDLE) {
 		throw std::runtime_error("failed to find a suitable GPU!");
 	}
 }
@@ -225,6 +234,52 @@ bool csmntVkApplication::isDeviceSuitable(VkPhysicalDevice device)
 	QueueFamilyIndices indices = findQueueFamilies(device);
 
 	return indices.isComplete();
+}
+
+void csmntVkApplication::createLogicalDevice()
+{
+	//Find and describe a Queue family with GFX capabilities
+	QueueFamilyIndices indices = findQueueFamilies(m_vkPhysicalDevice);
+
+	VkDeviceQueueCreateInfo queueCreateInfo = {};
+	queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+	queueCreateInfo.queueFamilyIndex = indices.graphicsFamily.value();
+	queueCreateInfo.queueCount = 1;
+
+	//Priority for scheduling command buffer execution
+	float queuePriority = 1.0f;
+	queueCreateInfo.pQueuePriorities = &queuePriority;
+
+	//Features (queried before with vkGetPhysicalDeviceFeatures)
+	//No features required just yet
+	VkPhysicalDeviceFeatures deviceFeatures = {};
+
+	//Create the logical device
+	VkDeviceCreateInfo createInfo = {};
+	createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+	createInfo.pQueueCreateInfos = &queueCreateInfo;
+	createInfo.queueCreateInfoCount = 1;
+	//Features requested here...
+	createInfo.pEnabledFeatures = &deviceFeatures;
+
+	//Add validation layers to the device
+	createInfo.enabledExtensionCount = 0;
+
+	if (m_enableValidationLayers) {
+		createInfo.enabledLayerCount = static_cast<uint32_t>(m_validationLayers.size());
+		createInfo.ppEnabledLayerNames = m_validationLayers.data();
+	}
+	else {
+		createInfo.enabledLayerCount = 0;
+	}
+
+	//Create!
+	if (vkCreateDevice(m_vkPhysicalDevice, &createInfo, nullptr, &m_vkDevice) != VK_SUCCESS) {
+		throw std::runtime_error("failed to create logical device!");
+	}
+
+	//Get the device queue
+	vkGetDeviceQueue(m_vkDevice, indices.graphicsFamily.value(), 0, &m_vkGraphicsQueue);
 }
 
 QueueFamilyIndices csmntVkApplication::findQueueFamilies(VkPhysicalDevice device)
