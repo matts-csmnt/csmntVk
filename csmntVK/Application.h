@@ -31,9 +31,10 @@ static void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMesse
 //Queue Family Checker
 struct QueueFamilyIndices {
 	std::optional<uint32_t> graphicsFamily;
+	std::optional<uint32_t> presentFamily;
 
 	bool isComplete() {
-		return graphicsFamily.has_value();
+		return graphicsFamily.has_value() && presentFamily.has_value();
 	}
 };
 
@@ -45,7 +46,7 @@ struct QueueFamilyIndices {
 class csmntVkApplication {
 public:
 	csmntVkApplication(int, int);
-	~csmntVkApplication() {};
+	~csmntVkApplication();
 
 	csmntVkApplication(csmntVkApplication&) = delete;
 	csmntVkApplication& operator=(const csmntVkApplication&) = delete;
@@ -57,10 +58,13 @@ public:
 private:
 	void initVulkan();
 	void initWindow();
+	
 	bool checkValidationLayerSupport();
 	void setupDebugMessenger();
-	void createVkInstance();
 	
+	void createVkInstance();
+	void createSurface();
+
 	void pickPhysicalDevice();
 	bool isDeviceSuitable(VkPhysicalDevice);
 	
@@ -84,6 +88,8 @@ private:
 	VkPhysicalDevice			m_vkPhysicalDevice = VK_NULL_HANDLE;	//GFX card
 	VkDevice					m_vkDevice;
 	VkQueue						m_vkGraphicsQueue;
+	VkQueue						m_vkPresentQueue;
+	VkSurfaceKHR				m_vkSurface;
 
 	//Validation Layers
 	std::vector<const char*> m_validationLayers;

@@ -1,12 +1,17 @@
 #include "Application.h"
 #include <stdexcept>
 #include <iostream>
+#include <set>
 
 csmntVkApplication::csmntVkApplication(int winW, int winH)
 	: m_winH(winH), m_winW(winW), m_pWindow(nullptr) 
 {
 	//Add a validation layer
 	m_validationLayers.push_back("VK_LAYER_LUNARG_standard_validation");
+}
+
+csmntVkApplication::~csmntVkApplication()
+{
 }
 
 void csmntVkApplication::run()
@@ -38,6 +43,8 @@ void csmntVkApplication::shutdown()
 		DestroyDebugUtilsMessengerEXT(m_vkInstance, m_debugMessenger, nullptr);
 	}
 
+	vkDestroySurfaceKHR(m_vkInstance, m_vkSurface, nullptr);
+
 	vkDestroyInstance(m_vkInstance, nullptr);
 
 	glfwDestroyWindow(m_pWindow);
@@ -50,6 +57,9 @@ void csmntVkApplication::initVulkan()
 	//Create instance and debug callbacks
 	createVkInstance();
 	setupDebugMessenger();
+
+	//Create the window surface
+	createSurface();
 
 	//Pick a GFX card
 	pickPhysicalDevice();
@@ -194,6 +204,14 @@ void csmntVkApplication::createVkInstance()
 #endif
 }
 
+void csmntVkApplication::createSurface()
+{
+	//glfw handles multiplat surface creation
+	if (glfwCreateWindowSurface(m_vkInstance, m_pWindow, nullptr, &m_vkSurface) != VK_SUCCESS) {
+		throw std::runtime_error("failed to create window surface!");
+	}
+}
+
 void csmntVkApplication::pickPhysicalDevice()
 {
 	//Look for GFX devices
@@ -241,14 +259,21 @@ void csmntVkApplication::createLogicalDevice()
 	//Find and describe a Queue family with GFX capabilities
 	QueueFamilyIndices indices = findQueueFamilies(m_vkPhysicalDevice);
 
-	VkDeviceQueueCreateInfo queueCreateInfo = {};
-	queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-	queueCreateInfo.queueFamilyIndex = indices.graphicsFamily.value();
-	queueCreateInfo.queueCount = 1;
+	std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
+	std::set<uint32_t> uniqueQueueFamilies = { indices.graphicsFamily.value(), indices.presentFamily.value() };
 
 	//Priority for scheduling command buffer execution
 	float queuePriority = 1.0f;
-	queueCreateInfo.pQueuePriorities = &queuePriority;
+
+	//Find and store unique queue families
+	for (uint32_t queueFamily : uniqueQueueFamilies) {
+		VkDeviceQueueCreateInfo queueCreateInfo = {};
+		queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+		queueCreateInfo.queueFamilyIndex = queueFamily;
+		queueCreateInfo.queueCount = 1;
+		queueCreateInfo.pQueuePriorities = &queuePriority;
+		queueCreateInfos.push_back(queueCreateInfo);
+	}
 
 	//Features (queried before with vkGetPhysicalDeviceFeatures)
 	//No features required just yet
@@ -257,8 +282,8 @@ void csmntVkApplication::createLogicalDevice()
 	//Create the logical device
 	VkDeviceCreateInfo createInfo = {};
 	createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-	createInfo.pQueueCreateInfos = &queueCreateInfo;
-	createInfo.queueCreateInfoCount = 1;
+	createInfo.pQueueCreateInfos = queueCreateInfos.data();
+	createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
 	//Features requested here...
 	createInfo.pEnabledFeatures = &deviceFeatures;
 
@@ -280,6 +305,7 @@ void csmntVkApplication::createLogicalDevice()
 
 	//Get the device queue
 	vkGetDeviceQueue(m_vkDevice, indices.graphicsFamily.value(), 0, &m_vkGraphicsQueue);
+	vkGetDeviceQueue(m_vkDevice, indices.presentFamily.value(), 0, &m_vkGraphicsQueue);
 }
 
 QueueFamilyIndices csmntVkApplication::findQueueFamilies(VkPhysicalDevice device)
@@ -294,8 +320,16 @@ QueueFamilyIndices csmntVkApplication::findQueueFamilies(VkPhysicalDevice device
 
 	int i = 0;
 	for (const auto& queueFamily : queueFamilies) {
+		
 		if (queueFamily.queueCount > 0 && queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
 			indices.graphicsFamily = i;
+		}
+
+		//Window surface support
+		VkBool32 presentSupport = false;
+		vkGetPhysicalDeviceSurfaceSupportKHR(device, i, m_vkSurface, &presentSupport);
+		if (queueFamily.queueCount > 0 && presentSupport) {
+			indices.presentFamily = i;
 		}
 
 		if (indices.isComplete()) {
