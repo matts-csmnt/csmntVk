@@ -10,6 +10,7 @@
 #include <optional>
 
 #include "vkDetailsStructs.h"
+#include "Graphics.h"
 
 //vkCreateDebugUtilsMessengerEXT function to create the VkDebugUtilsMessengerEXT object. 
 //Unfortunately, because this function is an extension function, it is not automatically loaded. 
@@ -67,6 +68,9 @@ private:
 	void createVkInstance();
 	void createSurface();
 	void createSwapChain();
+	void createImageViews();
+
+	void createGraphicsPipeline();
 
 	void pickPhysicalDevice();
 	bool isDeviceSuitable(VkPhysicalDevice);
@@ -103,6 +107,10 @@ private:
 	std::vector<VkImage>		m_vkSwapChainImages;
 	VkFormat					m_vkSwapChainImageFormat;
 	VkExtent2D					m_vkSwapChainExtent;
+	std::vector<VkImageView>    m_vkSwapChainImageViews;
+
+	//Graphics Module
+	csmntVkGraphics*			m_pGraphics;
 
 	//Validation Layers
 	std::vector<const char*> m_validationLayers;

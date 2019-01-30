@@ -12,10 +12,17 @@ csmntVkApplication::csmntVkApplication(int winW, int winH)
 
 	//Add required extensions -- swap chain
 	m_deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+
+#if _DEBUG
+	std::cout << "csmntVK Application Create" << std::endl;
+#endif
 }
 
 csmntVkApplication::~csmntVkApplication()
 {
+#if _DEBUG
+	std::cout << "csmntVK Application Destroy" << std::endl;
+#endif
 }
 
 void csmntVkApplication::run()
@@ -41,6 +48,17 @@ void csmntVkApplication::mainLoop()
 
 void csmntVkApplication::shutdown()
 {
+	if (m_pGraphics)
+	{
+		m_pGraphics->shutdown(m_vkDevice);
+		delete m_pGraphics;
+		m_pGraphics = nullptr;
+	}
+
+	for (auto imageView : m_vkSwapChainImageViews) {
+		vkDestroyImageView(m_vkDevice, imageView, nullptr);
+	}
+
 	vkDestroySwapchainKHR(m_vkDevice, m_vkSwapChain, nullptr);
 
 	vkDestroyDevice(m_vkDevice, nullptr);
@@ -75,6 +93,12 @@ void csmntVkApplication::initVulkan()
 
 	//Create swap chain
 	createSwapChain();
+
+	//Create Swap Chain image views
+	createImageViews();
+
+	//Create the graphics pipeline
+	createGraphicsPipeline();
 }
 
 void csmntVkApplication::initWindow()
@@ -292,6 +316,43 @@ void csmntVkApplication::createSwapChain()
 	//Store sfc format and extent
 	m_vkSwapChainImageFormat = surfaceFormat.format;
 	m_vkSwapChainExtent = extent;
+}
+
+void csmntVkApplication::createImageViews()
+{
+	m_vkSwapChainImageViews.resize(m_vkSwapChainImageViews.size());
+
+	//Iterate over all images 
+	for (size_t i = 0; i < m_vkSwapChainImageViews.size(); i++) {
+		//2d image view types
+		VkImageViewCreateInfo createInfo = {};
+		createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		createInfo.image = m_vkSwapChainImages[i];
+		createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		createInfo.format = m_vkSwapChainImageFormat;
+
+		createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+		createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+		createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+		createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+
+		createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		createInfo.subresourceRange.baseMipLevel = 0;
+		createInfo.subresourceRange.levelCount = 1;
+		createInfo.subresourceRange.baseArrayLayer = 0;
+		createInfo.subresourceRange.layerCount = 1;
+
+		if (vkCreateImageView(m_vkDevice, &createInfo, nullptr, &m_vkSwapChainImageViews[i]) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create image views!");
+		}
+	}
+}
+
+void csmntVkApplication::createGraphicsPipeline()
+{
+	m_pGraphics = new csmntVkGraphics();
+
+	m_pGraphics->createPipeline(&m_vkDevice, m_vkSwapChainExtent);
 }
 
 void csmntVkApplication::pickPhysicalDevice()
