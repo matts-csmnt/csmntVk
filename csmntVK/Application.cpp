@@ -354,6 +354,7 @@ void csmntVkApplication::createGraphicsPipeline()
 
 	m_pGraphics->createRenderPass(m_vkDevice, m_vkSwapChainImageFormat);
 	m_pGraphics->createPipeline(&m_vkDevice, m_vkSwapChainExtent);
+	m_pGraphics->createFramebuffers(m_vkDevice, m_vkSwapChainImageViews, m_vkSwapChainExtent);
 
 }
 

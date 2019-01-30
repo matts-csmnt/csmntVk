@@ -18,6 +18,10 @@ csmntVkGraphics::~csmntVkGraphics()
 
 void csmntVkGraphics::shutdown(VkDevice& device)
 {
+	for (auto framebuffer : m_vkSwapChainFramebuffers) {
+		vkDestroyFramebuffer(device, framebuffer, nullptr);
+	}
+
 	vkDestroyPipeline(device, m_vkGraphicsPipeline, nullptr);
 	vkDestroyPipelineLayout(device, m_vkPipelineLayout, nullptr);
 	vkDestroyRenderPass(device, m_vkRenderPass, nullptr);
@@ -247,6 +251,30 @@ void csmntVkGraphics::createRenderPass(VkDevice& device, VkFormat& swapChainImag
 
 	if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &m_vkRenderPass) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create render pass!");
+	}
+}
+
+void csmntVkGraphics::createFramebuffers(VkDevice& device, std::vector<VkImageView>& swapChainImageViews, VkExtent2D& swapChainExtent)
+{
+	m_vkSwapChainFramebuffers.resize(m_vkSwapChainFramebuffers.size());
+
+	for (size_t i = 0; i < swapChainImageViews.size(); i++) {
+		VkImageView attachments[] = {
+			swapChainImageViews[i]
+		};
+
+		VkFramebufferCreateInfo framebufferInfo = {};
+		framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+		framebufferInfo.renderPass = m_vkRenderPass;
+		framebufferInfo.attachmentCount = 1;
+		framebufferInfo.pAttachments = attachments;
+		framebufferInfo.width = swapChainExtent.width;
+		framebufferInfo.height = swapChainExtent.height;
+		framebufferInfo.layers = 1;
+
+		if (vkCreateFramebuffer(device, &framebufferInfo, nullptr, &m_vkSwapChainFramebuffers[i]) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create framebuffer!");
+		}
 	}
 }
 

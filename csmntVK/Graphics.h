@@ -20,11 +20,13 @@ public:
 	void shutdown(VkDevice&);
 	void createPipeline(VkDevice*, VkExtent2D&);
 	void createRenderPass(VkDevice&, VkFormat&);
+	void createFramebuffers(VkDevice&, std::vector<VkImageView>&, VkExtent2D&);
 
 private:
 	VkPipelineLayout m_vkPipelineLayout;
 	VkRenderPass     m_vkRenderPass;
 	VkPipeline		 m_vkGraphicsPipeline;
+	std::vector<VkFramebuffer> m_vkSwapChainFramebuffers;
 
 	static std::vector<char> readFile(const std::string& filename);
 	VkShaderModule createShaderModule(const std::vector<char>& code, VkDevice*);
