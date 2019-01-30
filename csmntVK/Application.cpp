@@ -352,7 +352,9 @@ void csmntVkApplication::createGraphicsPipeline()
 {
 	m_pGraphics = new csmntVkGraphics();
 
+	m_pGraphics->createRenderPass(m_vkDevice, m_vkSwapChainImageFormat);
 	m_pGraphics->createPipeline(&m_vkDevice, m_vkSwapChainExtent);
+
 }
 
 void csmntVkApplication::pickPhysicalDevice()

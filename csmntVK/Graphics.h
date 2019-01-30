@@ -19,9 +19,12 @@ public:
 
 	void shutdown(VkDevice&);
 	void createPipeline(VkDevice*, VkExtent2D&);
+	void createRenderPass(VkDevice&, VkFormat&);
 
 private:
 	VkPipelineLayout m_vkPipelineLayout;
+	VkRenderPass     m_vkRenderPass;
+	VkPipeline		 m_vkGraphicsPipeline;
 
 	static std::vector<char> readFile(const std::string& filename);
 	VkShaderModule createShaderModule(const std::vector<char>& code, VkDevice*);
