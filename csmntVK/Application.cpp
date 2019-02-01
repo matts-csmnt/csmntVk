@@ -325,7 +325,7 @@ void csmntVkApplication::createSwapChain()
 
 void csmntVkApplication::createImageViews()
 {
-	m_vkSwapChainImageViews.resize(m_vkSwapChainImageViews.size());
+	m_vkSwapChainImageViews.resize(m_vkSwapChainImages.size());
 
 	//Iterate over all images 
 	for (size_t i = 0; i < m_vkSwapChainImageViews.size(); i++) {

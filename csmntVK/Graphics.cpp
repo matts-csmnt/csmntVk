@@ -263,7 +263,7 @@ void csmntVkGraphics::createRenderPass(VkDevice& device, VkFormat& swapChainImag
 
 void csmntVkGraphics::createFramebuffers(VkDevice& device, std::vector<VkImageView>& swapChainImageViews, VkExtent2D& swapChainExtent)
 {
-	m_vkSwapChainFramebuffers.resize(m_vkSwapChainFramebuffers.size());
+	m_vkSwapChainFramebuffers.resize(swapChainImageViews.size());
 
 	for (size_t i = 0; i < swapChainImageViews.size(); i++) {
 		VkImageView attachments[] = {
