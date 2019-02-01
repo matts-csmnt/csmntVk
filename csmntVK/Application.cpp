@@ -50,7 +50,7 @@ void csmntVkApplication::mainLoop()
 		glfwPollEvents();
 
 		//Render Frame
-		m_pGraphics->drawFrame(m_vkDevice, m_vkSwapChain, m_vkGraphicsQueue, m_vkPresentQueue);
+		m_pGraphics->drawFrame(m_vkDevice, m_vkGraphicsQueue, m_vkPresentQueue);
 
 		//all of the operations in drawFrame are asynchronous. That means that when we exit the 
 		//loop in mainLoop, drawing and presentation operations may still be going on. Cleaning 
@@ -58,6 +58,19 @@ void csmntVkApplication::mainLoop()
 		//(https://vulkan-tutorial.com/Drawing_a_triangle/Drawing/Rendering_and_presentation)
 		vkDeviceWaitIdle(m_vkDevice);
 	}
+}
+
+void csmntVkApplication::createGraphicsPipeline()
+{
+	m_pGraphics = new csmntVkGraphics();
+
+	if (!m_pGraphics)
+	{
+		throw std::runtime_error("failed to create graphics pipeline!");
+		return;
+	}
+
+	m_pGraphics->createGraphicsPipeline(m_vkDevice, m_vkPhysicalDevice, m_vkSurface, m_winW, m_winH);
 }
 
 void csmntVkApplication::shutdown()
@@ -104,12 +117,6 @@ void csmntVkApplication::initVulkan()
 
 	//Create Logical device to interface with GFX card
 	createLogicalDevice();
-
-	//Create swap chain
-	createSwapChain();
-
-	//Create Swap Chain image views
-	createImageViews();
 
 	//Create the graphics pipeline
 	createGraphicsPipeline();
@@ -259,123 +266,6 @@ void csmntVkApplication::createSurface()
 	}
 }
 
-void csmntVkApplication::createSwapChain()
-{
-	//find supported swap chain info
-	SwapChainSupportDetails swapChainSupport = querySwapChainSupport(m_vkPhysicalDevice);
-
-	VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
-	VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
-	VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
-
-	//Images in the swap chain -- try settle for min + 1, else just go for max
-	uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
-	if (swapChainSupport.capabilities.maxImageCount > 0 && imageCount > swapChainSupport.capabilities.maxImageCount) {
-		imageCount = swapChainSupport.capabilities.maxImageCount;
-	}
-
-	//Begin creating the swap chain
-	VkSwapchainCreateInfoKHR createInfo = {};
-	createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-	createInfo.surface = m_vkSurface;
-	createInfo.minImageCount = imageCount;
-	createInfo.imageFormat = surfaceFormat.format;
-	createInfo.imageColorSpace = surfaceFormat.colorSpace;
-	createInfo.imageExtent = extent;
-	createInfo.imageArrayLayers = 1;
-	//to perform operations like post - processing [...] you may use a value 
-	//like VK_IMAGE_USAGE_TRANSFER_DST_BIT instead and use a memory operation 
-	//to transfer the rendered image to a swap chain image. (https://vulkan-tutorial.com/Drawing_a_triangle/Presentation/Swap_chain)
-	createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-
-	//Decide if images are exclusive to queue families or concurrent
-	QueueFamilyIndices indices = findQueueFamilies(m_vkPhysicalDevice, m_vkSurface);
-	uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.presentFamily.value() };
-
-	if (indices.graphicsFamily != indices.presentFamily) {
-		createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-		createInfo.queueFamilyIndexCount = 2;
-		createInfo.pQueueFamilyIndices = queueFamilyIndices;
-	}
-	else {
-		createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		createInfo.queueFamilyIndexCount = 0; // Optional
-		createInfo.pQueueFamilyIndices = nullptr; // Optional
-	}
-
-	//It's possible to apply transforms to images like rotations... cool
-	//Just use the current one as default
-	createInfo.preTransform = swapChainSupport.capabilities.currentTransform;
-
-	//Ignore the alpha channel for now, usually for blending with other windows etc.
-	createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-
-	//Clip for performance (if windows obscure etc) 
-	createInfo.presentMode = presentMode;
-	createInfo.clipped = VK_TRUE;
-
-	//resizing the window etc requires chains to be created from scratch...
-	//here's where you have to reference the dead one
-	createInfo.oldSwapchain = VK_NULL_HANDLE;
-
-	if (vkCreateSwapchainKHR(m_vkDevice, &createInfo, nullptr, &m_vkSwapChain) != VK_SUCCESS) {
-		throw std::runtime_error("failed to create swap chain!");
-	}
-	
-	//get handles to images created
-	vkGetSwapchainImagesKHR(m_vkDevice, m_vkSwapChain, &imageCount, nullptr);
-	m_vkSwapChainImages.resize(imageCount);
-	vkGetSwapchainImagesKHR(m_vkDevice, m_vkSwapChain, &imageCount, m_vkSwapChainImages.data());
-
-	//Store sfc format and extent
-	m_vkSwapChainImageFormat = surfaceFormat.format;
-	m_vkSwapChainExtent = extent;
-}
-
-void csmntVkApplication::createImageViews()
-{
-	m_vkSwapChainImageViews.resize(m_vkSwapChainImages.size());
-
-	//Iterate over all images 
-	for (size_t i = 0; i < m_vkSwapChainImageViews.size(); i++) {
-		//2d image view types
-		VkImageViewCreateInfo createInfo = {};
-		createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-		createInfo.image = m_vkSwapChainImages[i];
-		createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-		createInfo.format = m_vkSwapChainImageFormat;
-
-		createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-		createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-		createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-		createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-
-		createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		createInfo.subresourceRange.baseMipLevel = 0;
-		createInfo.subresourceRange.levelCount = 1;
-		createInfo.subresourceRange.baseArrayLayer = 0;
-		createInfo.subresourceRange.layerCount = 1;
-
-		if (vkCreateImageView(m_vkDevice, &createInfo, nullptr, &m_vkSwapChainImageViews[i]) != VK_SUCCESS) {
-			throw std::runtime_error("failed to create image views!");
-		}
-	}
-}
-
-void csmntVkApplication::createGraphicsPipeline()
-{
-	m_pGraphics = new csmntVkGraphics();
-
-	if (!m_pGraphics)
-	{
-		throw std::runtime_error("failed to create graphics pipeline!");
-		return;
-	}
-
-	m_pGraphics->createGraphicsPipeline(m_vkDevice, m_vkSwapChainExtent, m_vkSwapChainImageFormat,
-										m_vkPhysicalDevice, m_vkSurface, m_vkSwapChainImageViews);
-}
-
 void csmntVkApplication::pickPhysicalDevice()
 {
 	//Look for GFX devices
@@ -500,91 +390,6 @@ bool csmntVkApplication::checkDeviceExtensionSupport(VkPhysicalDevice device)
 	}
 
 	return requiredExtensions.empty();
-}
-
-SwapChainSupportDetails csmntVkApplication::querySwapChainSupport(VkPhysicalDevice device)
-{
-	SwapChainSupportDetails details;
-
-	//Basic surface capabilities
-	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, m_vkSurface, &details.capabilities);
-
-	//Formats
-	uint32_t formatCount;
-	vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_vkSurface, &formatCount, nullptr);
-
-	if (formatCount != 0) {
-		details.formats.resize(formatCount);
-		vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_vkSurface, &formatCount, details.formats.data());
-	}
-
-	//Presentation modes
-	uint32_t presentModeCount;
-	vkGetPhysicalDeviceSurfacePresentModesKHR(device, m_vkSurface, &presentModeCount, nullptr);
-
-	if (presentModeCount != 0) {
-		details.presentModes.resize(presentModeCount);
-		vkGetPhysicalDeviceSurfacePresentModesKHR(device, m_vkSurface, &presentModeCount, details.presentModes.data());
-	}
-
-	return details;
-}
-
-VkSurfaceFormatKHR csmntVkApplication::chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats)
-{
-	//if vulkan finds no preferred format, use SRGB, BGRA 8
-	if (availableFormats.size() == 1 && availableFormats[0].format == VK_FORMAT_UNDEFINED) {
-		return { VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR };
-	}
-
-	//if vulkan finds preferred formats, look for our ideal
-	for (const auto& availableFormat : availableFormats) {
-		if (availableFormat.format == VK_FORMAT_B8G8R8A8_UNORM && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
-			return availableFormat;
-		}
-	}
-
-	//if it isn't there just return first, it'll do
-	//TODO: rank formats and select?
-	return availableFormats[0];
-}
-
-VkPresentModeKHR csmntVkApplication::chooseSwapPresentMode(const std::vector<VkPresentModeKHR> availablePresentModes)
-{
-	//should always be available
-	VkPresentModeKHR bestMode = VK_PRESENT_MODE_FIFO_KHR;
-
-	//look for mailbox PM:
-	//triple buffering is a very nice trade-off. It allows us to avoid tearing while 
-	//still maintaining a fairly low latency by rendering new images that are as up-to-date 
-	//as possible right until the vertical blank (https://vulkan-tutorial.com/Drawing_a_triangle/Presentation/Swap_chain)
-	for (const auto& availablePresentMode : availablePresentModes) {
-		if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
-			return availablePresentMode;
-		}
-		//FIFO is sometimes unsupported by drivers... boo
-		else if (availablePresentMode == VK_PRESENT_MODE_IMMEDIATE_KHR) {
-			bestMode = availablePresentMode;
-		}
-	}
-
-	return bestMode;
-}
-
-VkExtent2D csmntVkApplication::chooseSwapExtent(const VkSurfaceCapabilitiesKHR & capabilities)
-{
-	//swap chain resolution - usually winwow res, but we can sometimes do better
-	if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
-		return capabilities.currentExtent;
-	}
-	else {
-		VkExtent2D actualExtent = { m_winW, m_winH };
-
-		actualExtent.width = std::max(capabilities.minImageExtent.width, std::min(capabilities.maxImageExtent.width, actualExtent.width));
-		actualExtent.height = std::max(capabilities.minImageExtent.height, std::min(capabilities.maxImageExtent.height, actualExtent.height));
-
-		return actualExtent;
-	}
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL csmntVkApplication::debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT * pCallbackData, void * pUserData)

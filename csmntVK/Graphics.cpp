@@ -1,6 +1,9 @@
 #include "Graphics.h"
 #include <fstream>
 #include <iostream>
+#include <cstdlib>
+#include <set>
+#include <algorithm>
 
 #ifndef _vk_details_h
 #define _vk_details_h
@@ -40,19 +43,21 @@ void csmntVkGraphics::shutdown(VkDevice& device)
 	vkDestroyRenderPass(device, m_vkRenderPass, nullptr);
 }
 
-void csmntVkGraphics::createGraphicsPipeline(VkDevice& device, VkExtent2D& swapChainExtent, VkFormat& swapChainImageFormat, 
-											 VkPhysicalDevice& physicalDevice, VkSurfaceKHR& surface, 
-											 std::vector<VkImageView>& swapChainImageViews)
+void csmntVkGraphics::createGraphicsPipeline(VkDevice& device, VkPhysicalDevice& physicalDevice, VkSurfaceKHR& surface, 
+											 const int width, const int height)
 {
-	createRenderPass(device, swapChainImageFormat);
-	createPipeline(device, swapChainExtent);
-	createFramebuffers(device, swapChainImageViews, swapChainExtent);
+	createSwapChain(device, physicalDevice, surface, width, height);
+	createImageViews(device);
+
+	createRenderPass(device);
+	createPipeline(device);
+	createFramebuffers(device, m_vkSwapChainExtent);
 	createCommandPool(device, physicalDevice, surface);
-	createCommandBuffers(device, swapChainExtent);
+	createCommandBuffers(device, m_vkSwapChainExtent);
 	createSemaphoresAndFences(device);
 }
 
-void csmntVkGraphics::createPipeline(VkDevice& device, VkExtent2D& swapChainExtent)
+void csmntVkGraphics::createPipeline(VkDevice& device)
 {
 	auto vertShaderCode = readFile("../Shaders/vert.spv");
 	auto fragShaderCode = readFile("../Shaders/frag.spv");
@@ -99,15 +104,15 @@ void csmntVkGraphics::createPipeline(VkDevice& device, VkExtent2D& swapChainExte
 	VkViewport viewport = {};
 	viewport.x = 0.0f;
 	viewport.y = 0.0f;
-	viewport.width = (float)swapChainExtent.width;
-	viewport.height = (float)swapChainExtent.height;
+	viewport.width = (float)m_vkSwapChainExtent.width;
+	viewport.height = (float)m_vkSwapChainExtent.height;
 	viewport.minDepth = 0.0f;
 	viewport.maxDepth = 1.0f;
 
 	//Scissor rect
 	VkRect2D scissor = {};
 	scissor.offset = { 0, 0 };
-	scissor.extent = swapChainExtent;
+	scissor.extent = m_vkSwapChainExtent;
 
 	VkPipelineViewportStateCreateInfo viewportState = {};
 	viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -242,10 +247,10 @@ void csmntVkGraphics::createPipeline(VkDevice& device, VkExtent2D& swapChainExte
 	vkDestroyShaderModule(device, vertShaderModule, nullptr);
 }
 
-void csmntVkGraphics::createRenderPass(VkDevice& device, VkFormat& swapChainImageFormat)
+void csmntVkGraphics::createRenderPass(VkDevice& device)
 {
 	VkAttachmentDescription colorAttachment = {};
-	colorAttachment.format = swapChainImageFormat;
+	colorAttachment.format = m_vkSwapChainImageFormat;
 	colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
 	colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 	colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -291,13 +296,13 @@ void csmntVkGraphics::createRenderPass(VkDevice& device, VkFormat& swapChainImag
 	}
 }
 
-void csmntVkGraphics::createFramebuffers(VkDevice& device, std::vector<VkImageView>& swapChainImageViews, VkExtent2D& swapChainExtent)
+void csmntVkGraphics::createFramebuffers(VkDevice& device, VkExtent2D& swapChainExtent)
 {
-	m_vkSwapChainFramebuffers.resize(swapChainImageViews.size());
+	m_vkSwapChainFramebuffers.resize(m_vkSwapChainImageViews.size());
 
-	for (size_t i = 0; i < swapChainImageViews.size(); i++) {
+	for (size_t i = 0; i < m_vkSwapChainImageViews.size(); i++) {
 		VkImageView attachments[] = {
-			swapChainImageViews[i]
+			m_vkSwapChainImageViews[i]
 		};
 
 		VkFramebufferCreateInfo framebufferInfo = {};
@@ -419,14 +424,14 @@ void csmntVkGraphics::createSemaphoresAndFences(VkDevice& device)
 	}
 }
 
-void csmntVkGraphics::drawFrame(VkDevice& device, VkSwapchainKHR& swapChain, VkQueue& graphicsQueue, VkQueue& presentQueue)
+void csmntVkGraphics::drawFrame(VkDevice& device, VkQueue& graphicsQueue, VkQueue& presentQueue)
 {
 	//Wait for frame to finish before continuing with another
 	vkWaitForFences(device, 1, &m_vkInFlightFences[currentFrame], VK_TRUE, std::numeric_limits<uint64_t>::max());
 	vkResetFences(device, 1, &m_vkInFlightFences[currentFrame]);
 
 	uint32_t imageIndex;
-	vkAcquireNextImageKHR(device, swapChain, std::numeric_limits<uint64_t>::max(), m_vkImageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
+	vkAcquireNextImageKHR(device, m_vkSwapChain, std::numeric_limits<uint64_t>::max(), m_vkImageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
 
 	VkSubmitInfo submitInfo = {};
 	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -456,7 +461,7 @@ void csmntVkGraphics::drawFrame(VkDevice& device, VkSwapchainKHR& swapChain, VkQ
 	presentInfo.waitSemaphoreCount = 1;
 	presentInfo.pWaitSemaphores = signalSemaphores;
 
-	VkSwapchainKHR swapChains[] = { swapChain };
+	VkSwapchainKHR swapChains[] = { m_vkSwapChain };
 	presentInfo.swapchainCount = 1;
 	presentInfo.pSwapchains = swapChains;
 	presentInfo.pImageIndices = &imageIndex;
@@ -471,6 +476,109 @@ void csmntVkGraphics::drawFrame(VkDevice& device, VkSwapchainKHR& swapChain, VkQ
 
 	//Advance frame
 	currentFrame = (currentFrame + 1) % m_MAX_FRAMES_IN_FLIGHT;
+}
+
+void csmntVkGraphics::createSwapChain(VkDevice& device, VkPhysicalDevice& physicalDevice, VkSurfaceKHR& surface, const int width, const int height)
+{
+	//find supported swap chain info
+	SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice, surface);
+
+	VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
+	VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
+	VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities, width, height);
+
+	//Images in the swap chain -- try settle for min + 1, else just go for max
+	uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
+	if (swapChainSupport.capabilities.maxImageCount > 0 && imageCount > swapChainSupport.capabilities.maxImageCount) {
+		imageCount = swapChainSupport.capabilities.maxImageCount;
+	}
+
+	//Begin creating the swap chain
+	VkSwapchainCreateInfoKHR createInfo = {};
+	createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+	createInfo.surface = surface;
+	createInfo.minImageCount = imageCount;
+	createInfo.imageFormat = surfaceFormat.format;
+	createInfo.imageColorSpace = surfaceFormat.colorSpace;
+	createInfo.imageExtent = extent;
+	createInfo.imageArrayLayers = 1;
+	//to perform operations like post - processing [...] you may use a value 
+	//like VK_IMAGE_USAGE_TRANSFER_DST_BIT instead and use a memory operation 
+	//to transfer the rendered image to a swap chain image. (https://vulkan-tutorial.com/Drawing_a_triangle/Presentation/Swap_chain)
+	createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+	//Decide if images are exclusive to queue families or concurrent
+	QueueFamilyIndices indices = findQueueFamilies(physicalDevice, surface);
+	uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.presentFamily.value() };
+
+	if (indices.graphicsFamily != indices.presentFamily) {
+		createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+		createInfo.queueFamilyIndexCount = 2;
+		createInfo.pQueueFamilyIndices = queueFamilyIndices;
+	}
+	else {
+		createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		createInfo.queueFamilyIndexCount = 0; // Optional
+		createInfo.pQueueFamilyIndices = nullptr; // Optional
+	}
+
+	//It's possible to apply transforms to images like rotations... cool
+	//Just use the current one as default
+	createInfo.preTransform = swapChainSupport.capabilities.currentTransform;
+
+	//Ignore the alpha channel for now, usually for blending with other windows etc.
+	createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+
+	//Clip for performance (if windows obscure etc) 
+	createInfo.presentMode = presentMode;
+	createInfo.clipped = VK_TRUE;
+
+	//resizing the window etc requires chains to be created from scratch...
+	//here's where you have to reference the dead one
+	createInfo.oldSwapchain = VK_NULL_HANDLE;
+
+	if (vkCreateSwapchainKHR(device, &createInfo, nullptr, &m_vkSwapChain) != VK_SUCCESS) {
+		throw std::runtime_error("failed to create swap chain!");
+	}
+
+	//get handles to images created
+	vkGetSwapchainImagesKHR(device, m_vkSwapChain, &imageCount, nullptr);
+	m_vkSwapChainImages.resize(imageCount);
+	vkGetSwapchainImagesKHR(device, m_vkSwapChain, &imageCount, m_vkSwapChainImages.data());
+
+	//Store sfc format and extent
+	m_vkSwapChainImageFormat = surfaceFormat.format;
+	m_vkSwapChainExtent = extent;
+}
+
+void csmntVkGraphics::createImageViews(VkDevice& device)
+{
+	m_vkSwapChainImageViews.resize(m_vkSwapChainImages.size());
+
+	//Iterate over all images 
+	for (size_t i = 0; i < m_vkSwapChainImageViews.size(); i++) {
+		//2d image view types
+		VkImageViewCreateInfo createInfo = {};
+		createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		createInfo.image = m_vkSwapChainImages[i];
+		createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		createInfo.format = m_vkSwapChainImageFormat;
+
+		createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+		createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+		createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+		createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+
+		createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		createInfo.subresourceRange.baseMipLevel = 0;
+		createInfo.subresourceRange.levelCount = 1;
+		createInfo.subresourceRange.baseArrayLayer = 0;
+		createInfo.subresourceRange.layerCount = 1;
+
+		if (vkCreateImageView(device, &createInfo, nullptr, &m_vkSwapChainImageViews[i]) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create image views!");
+		}
+	}
 }
 
 std::vector<char> csmntVkGraphics::readFile(const std::string & filename)
@@ -504,4 +612,89 @@ VkShaderModule csmntVkGraphics::createShaderModule(const std::vector<char>& code
 	}
 
 	return shaderModule;
+}
+
+SwapChainSupportDetails csmntVkGraphics::querySwapChainSupport(VkPhysicalDevice& device, VkSurfaceKHR& surface)
+{
+	SwapChainSupportDetails details;
+
+	//Basic surface capabilities
+	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
+
+	//Formats
+	uint32_t formatCount;
+	vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, nullptr);
+
+	if (formatCount != 0) {
+		details.formats.resize(formatCount);
+		vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, details.formats.data());
+	}
+
+	//Presentation modes
+	uint32_t presentModeCount;
+	vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, nullptr);
+
+	if (presentModeCount != 0) {
+		details.presentModes.resize(presentModeCount);
+		vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, details.presentModes.data());
+	}
+
+	return details;
+}
+
+VkSurfaceFormatKHR csmntVkGraphics::chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats)
+{
+	//if vulkan finds no preferred format, use SRGB, BGRA 8
+	if (availableFormats.size() == 1 && availableFormats[0].format == VK_FORMAT_UNDEFINED) {
+		return { VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR };
+	}
+
+	//if vulkan finds preferred formats, look for our ideal
+	for (const auto& availableFormat : availableFormats) {
+		if (availableFormat.format == VK_FORMAT_B8G8R8A8_UNORM && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+			return availableFormat;
+		}
+	}
+
+	//if it isn't there just return first, it'll do
+	//TODO: rank formats and select?
+	return availableFormats[0];
+}
+
+VkPresentModeKHR csmntVkGraphics::chooseSwapPresentMode(const std::vector<VkPresentModeKHR> availablePresentModes)
+{
+	//should always be available
+	VkPresentModeKHR bestMode = VK_PRESENT_MODE_FIFO_KHR;
+
+	//look for mailbox PM:
+	//triple buffering is a very nice trade-off. It allows us to avoid tearing while 
+	//still maintaining a fairly low latency by rendering new images that are as up-to-date 
+	//as possible right until the vertical blank (https://vulkan-tutorial.com/Drawing_a_triangle/Presentation/Swap_chain)
+	for (const auto& availablePresentMode : availablePresentModes) {
+		if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
+			return availablePresentMode;
+		}
+		//FIFO is sometimes unsupported by drivers... boo
+		else if (availablePresentMode == VK_PRESENT_MODE_IMMEDIATE_KHR) {
+			bestMode = availablePresentMode;
+		}
+	}
+
+	return bestMode;
+}
+
+VkExtent2D csmntVkGraphics::chooseSwapExtent(const VkSurfaceCapabilitiesKHR & capabilities, const int width, const int height)
+{
+	//swap chain resolution - usually winwow res, but we can sometimes do better
+	if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
+		return capabilities.currentExtent;
+	}
+	else {
+		VkExtent2D actualExtent = { width, height };
+
+		actualExtent.width = std::max(capabilities.minImageExtent.width, std::min(capabilities.maxImageExtent.width, actualExtent.width));
+		actualExtent.height = std::max(capabilities.minImageExtent.height, std::min(capabilities.maxImageExtent.height, actualExtent.height));
+
+		return actualExtent;
+	}
 }

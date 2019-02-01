@@ -11,14 +11,6 @@
 
 #include "Graphics.h"
 
-//Swap chain details
-struct SwapChainSupportDetails {
-	VkSurfaceCapabilitiesKHR capabilities;
-	std::vector<VkSurfaceFormatKHR> formats;
-	std::vector<VkPresentModeKHR> presentModes;
-};
-//--------------------
-
 //vkCreateDebugUtilsMessengerEXT function to create the VkDebugUtilsMessengerEXT object. 
 //Unfortunately, because this function is an extension function, it is not automatically loaded. 
 //We have to look up its address ourselves using vkGetInstanceProcAddr (https://vulkan-tutorial.com/Drawing_a_triangle/Setup/Validation_layers)
@@ -65,8 +57,6 @@ private:
 	
 	void createVkInstance();
 	void createSurface();
-	void createSwapChain();
-	void createImageViews();
 
 	void createGraphicsPipeline();
 
@@ -77,11 +67,6 @@ private:
 
 	std::vector<const char*> getRequiredExtensions();
 	bool checkDeviceExtensionSupport(VkPhysicalDevice);
-
-	SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice);
-	VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>&);
-	VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>);
-	VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR&);
 
 	static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
 		VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
@@ -100,11 +85,6 @@ private:
 	VkQueue						m_vkGraphicsQueue;
 	VkQueue						m_vkPresentQueue;
 	VkSurfaceKHR				m_vkSurface;
-	VkSwapchainKHR				m_vkSwapChain;
-	std::vector<VkImage>		m_vkSwapChainImages;
-	VkFormat					m_vkSwapChainImageFormat;
-	VkExtent2D					m_vkSwapChainExtent;
-	std::vector<VkImageView>    m_vkSwapChainImageViews;
 
 	//Graphics Module
 	csmntVkGraphics*			m_pGraphics;
