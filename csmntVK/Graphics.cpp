@@ -23,6 +23,12 @@ csmntVkGraphics::~csmntVkGraphics()
 
 void csmntVkGraphics::shutdown(VkDevice& device)
 {
+	for (size_t i = 0; i < m_MAX_FRAMES_IN_FLIGHT; i++) {
+		vkDestroySemaphore(device, m_vkRenderFinishedSemaphores[i], nullptr);
+		vkDestroySemaphore(device, m_vkImageAvailableSemaphores[i], nullptr);
+		vkDestroyFence(device, m_vkInFlightFences[i], nullptr);
+	}
+
 	vkDestroyCommandPool(device, m_vkCommandPool, nullptr);
 
 	for (auto framebuffer : m_vkSwapChainFramebuffers) {
@@ -34,13 +40,25 @@ void csmntVkGraphics::shutdown(VkDevice& device)
 	vkDestroyRenderPass(device, m_vkRenderPass, nullptr);
 }
 
-void csmntVkGraphics::createPipeline(VkDevice* device, VkExtent2D& swapChainExtent)
+void csmntVkGraphics::createGraphicsPipeline(VkDevice& device, VkExtent2D& swapChainExtent, VkFormat& swapChainImageFormat, 
+											 VkPhysicalDevice& physicalDevice, VkSurfaceKHR& surface, 
+											 std::vector<VkImageView>& swapChainImageViews)
+{
+	createRenderPass(device, swapChainImageFormat);
+	createPipeline(device, swapChainExtent);
+	createFramebuffers(device, swapChainImageViews, swapChainExtent);
+	createCommandPool(device, physicalDevice, surface);
+	createCommandBuffers(device, swapChainExtent);
+	createSemaphoresAndFences(device);
+}
+
+void csmntVkGraphics::createPipeline(VkDevice& device, VkExtent2D& swapChainExtent)
 {
 	auto vertShaderCode = readFile("../Shaders/vert.spv");
 	auto fragShaderCode = readFile("../Shaders/frag.spv");
 
-	VkShaderModule vertShaderModule = createShaderModule(vertShaderCode, device);
-	VkShaderModule fragShaderModule = createShaderModule(fragShaderCode, device);
+	VkShaderModule vertShaderModule = createShaderModule(vertShaderCode, &device);
+	VkShaderModule fragShaderModule = createShaderModule(fragShaderCode, &device);
 
 	//Vertex Shader
 	VkPipelineShaderStageCreateInfo vertShaderStageInfo = {};
@@ -188,7 +206,7 @@ void csmntVkGraphics::createPipeline(VkDevice* device, VkExtent2D& swapChainExte
 	pipelineLayoutInfo.pushConstantRangeCount = 0; // Optional
 	pipelineLayoutInfo.pPushConstantRanges = nullptr; // Optional
 
-	if (vkCreatePipelineLayout(*device, &pipelineLayoutInfo, nullptr, &m_vkPipelineLayout) != VK_SUCCESS) {
+	if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &m_vkPipelineLayout) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create pipeline layout!");
 	}
 
@@ -216,12 +234,12 @@ void csmntVkGraphics::createPipeline(VkDevice* device, VkExtent2D& swapChainExte
 	pipelineInfo.basePipelineHandle = VK_NULL_HANDLE; // Optional
 	pipelineInfo.basePipelineIndex = -1; // Optional
 
-	if (vkCreateGraphicsPipelines(*device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_vkGraphicsPipeline) != VK_SUCCESS) {
+	if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_vkGraphicsPipeline) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create graphics pipeline!");
 	}
 
-	vkDestroyShaderModule(*device, fragShaderModule, nullptr);
-	vkDestroyShaderModule(*device, vertShaderModule, nullptr);
+	vkDestroyShaderModule(device, fragShaderModule, nullptr);
+	vkDestroyShaderModule(device, vertShaderModule, nullptr);
 }
 
 void csmntVkGraphics::createRenderPass(VkDevice& device, VkFormat& swapChainImageFormat)
@@ -248,6 +266,15 @@ void csmntVkGraphics::createRenderPass(VkDevice& device, VkFormat& swapChainImag
 	subpass.colorAttachmentCount = 1;
 	subpass.pColorAttachments = &colorAttachmentRef;
 
+	//Subpass Dependency - make the render pass wait for the VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT stage
+	VkSubpassDependency dependency = {};
+	dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+	dependency.dstSubpass = 0;
+	dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	dependency.srcAccessMask = 0;
+	dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
 	//Create the pass
 	VkRenderPassCreateInfo renderPassInfo = {};
 	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
@@ -255,6 +282,9 @@ void csmntVkGraphics::createRenderPass(VkDevice& device, VkFormat& swapChainImag
 	renderPassInfo.pAttachments = &colorAttachment;
 	renderPassInfo.subpassCount = 1;
 	renderPassInfo.pSubpasses = &subpass;
+
+	renderPassInfo.dependencyCount = 1;
+	renderPassInfo.pDependencies = &dependency;
 
 	if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &m_vkRenderPass) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create render pass!");
@@ -363,6 +393,84 @@ void csmntVkGraphics::createCommandBuffers(VkDevice& device, VkExtent2D& swapCha
 			throw std::runtime_error("failed to record command buffer!");
 		}
 	}
+}
+
+void csmntVkGraphics::createSemaphoresAndFences(VkDevice& device)
+{
+	m_vkImageAvailableSemaphores.resize(m_MAX_FRAMES_IN_FLIGHT);
+	m_vkRenderFinishedSemaphores.resize(m_MAX_FRAMES_IN_FLIGHT);
+	m_vkInFlightFences.resize(m_MAX_FRAMES_IN_FLIGHT);
+
+	VkSemaphoreCreateInfo semaphoreInfo = {};
+	semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+	VkFenceCreateInfo fenceInfo = {};
+	fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+	//Signal the fence to simulate an initial frame
+	fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+	for (size_t i = 0; i < m_MAX_FRAMES_IN_FLIGHT; i++) {
+		if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &m_vkImageAvailableSemaphores[i]) != VK_SUCCESS ||
+			vkCreateSemaphore(device, &semaphoreInfo, nullptr, &m_vkRenderFinishedSemaphores[i]) != VK_SUCCESS ||
+			vkCreateFence(device, &fenceInfo, nullptr, &m_vkInFlightFences[i]) != VK_SUCCESS) {
+
+			throw std::runtime_error("failed to create synchronization objects (semaphore or fence) for a frame!");
+		}
+	}
+}
+
+void csmntVkGraphics::drawFrame(VkDevice& device, VkSwapchainKHR& swapChain, VkQueue& graphicsQueue, VkQueue& presentQueue)
+{
+	//Wait for frame to finish before continuing with another
+	vkWaitForFences(device, 1, &m_vkInFlightFences[currentFrame], VK_TRUE, std::numeric_limits<uint64_t>::max());
+	vkResetFences(device, 1, &m_vkInFlightFences[currentFrame]);
+
+	uint32_t imageIndex;
+	vkAcquireNextImageKHR(device, swapChain, std::numeric_limits<uint64_t>::max(), m_vkImageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
+
+	VkSubmitInfo submitInfo = {};
+	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+
+	VkSemaphore waitSemaphores[] = { m_vkImageAvailableSemaphores[currentFrame] };
+	VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+	submitInfo.waitSemaphoreCount = 1;
+	submitInfo.pWaitSemaphores = waitSemaphores;
+	submitInfo.pWaitDstStageMask = waitStages;
+
+	//bind command buffer
+	submitInfo.commandBufferCount = 1;
+	submitInfo.pCommandBuffers = &m_vkCommandBuffers[imageIndex];
+
+	VkSemaphore signalSemaphores[] = { m_vkRenderFinishedSemaphores[currentFrame] };
+	submitInfo.signalSemaphoreCount = 1;
+	submitInfo.pSignalSemaphores = signalSemaphores;
+
+	//submit queue and signal fence
+	if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, m_vkInFlightFences[currentFrame]) != VK_SUCCESS) {
+		throw std::runtime_error("failed to submit draw command buffer!");
+	}
+
+	//Present to swap chain
+	VkPresentInfoKHR presentInfo = {};
+	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+	presentInfo.waitSemaphoreCount = 1;
+	presentInfo.pWaitSemaphores = signalSemaphores;
+
+	VkSwapchainKHR swapChains[] = { swapChain };
+	presentInfo.swapchainCount = 1;
+	presentInfo.pSwapchains = swapChains;
+	presentInfo.pImageIndices = &imageIndex;
+
+	//allows you to specify an array of VkResult values to check for every individual 
+	//swap chain if presentation was successful. It's not necessary if you're only using 
+	//a single swap chain, because you can simply use the return value of the present function
+	//(https://vulkan-tutorial.com/Drawing_a_triangle/Drawing/Rendering_and_presentation)
+	presentInfo.pResults = nullptr; // Optional
+
+	vkQueuePresentKHR(presentQueue, &presentInfo);
+
+	//Advance frame
+	currentFrame = (currentFrame + 1) % m_MAX_FRAMES_IN_FLIGHT;
 }
 
 std::vector<char> csmntVkGraphics::readFile(const std::string & filename)

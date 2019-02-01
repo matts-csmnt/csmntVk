@@ -48,6 +48,15 @@ void csmntVkApplication::mainLoop()
 	//Run window until error or closed
 	while (!glfwWindowShouldClose(m_pWindow)) {
 		glfwPollEvents();
+
+		//Render Frame
+		m_pGraphics->drawFrame(m_vkDevice, m_vkSwapChain, m_vkGraphicsQueue, m_vkPresentQueue);
+
+		//all of the operations in drawFrame are asynchronous. That means that when we exit the 
+		//loop in mainLoop, drawing and presentation operations may still be going on. Cleaning 
+		//up resources while that is happening is a bad idea.
+		//(https://vulkan-tutorial.com/Drawing_a_triangle/Drawing/Rendering_and_presentation)
+		vkDeviceWaitIdle(m_vkDevice);
 	}
 }
 
@@ -363,11 +372,8 @@ void csmntVkApplication::createGraphicsPipeline()
 		return;
 	}
 
-	m_pGraphics->createRenderPass(m_vkDevice, m_vkSwapChainImageFormat);
-	m_pGraphics->createPipeline(&m_vkDevice, m_vkSwapChainExtent);
-	m_pGraphics->createFramebuffers(m_vkDevice, m_vkSwapChainImageViews, m_vkSwapChainExtent);
-	m_pGraphics->createCommandPool(m_vkDevice, m_vkPhysicalDevice, m_vkSurface);
-	m_pGraphics->createCommandBuffers(m_vkDevice, m_vkSwapChainExtent);
+	m_pGraphics->createGraphicsPipeline(m_vkDevice, m_vkSwapChainExtent, m_vkSwapChainImageFormat,
+										m_vkPhysicalDevice, m_vkSurface, m_vkSwapChainImageViews);
 }
 
 void csmntVkApplication::pickPhysicalDevice()
@@ -475,7 +481,7 @@ void csmntVkApplication::createLogicalDevice()
 
 	//Get the device queue
 	vkGetDeviceQueue(m_vkDevice, indices.graphicsFamily.value(), 0, &m_vkGraphicsQueue);
-	vkGetDeviceQueue(m_vkDevice, indices.presentFamily.value(), 0, &m_vkGraphicsQueue);
+	vkGetDeviceQueue(m_vkDevice, indices.presentFamily.value(), 0, &m_vkPresentQueue);
 }
 
 bool csmntVkApplication::checkDeviceExtensionSupport(VkPhysicalDevice device)
