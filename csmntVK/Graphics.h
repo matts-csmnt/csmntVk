@@ -21,12 +21,16 @@ public:
 	void createPipeline(VkDevice*, VkExtent2D&);
 	void createRenderPass(VkDevice&, VkFormat&);
 	void createFramebuffers(VkDevice&, std::vector<VkImageView>&, VkExtent2D&);
+	void createCommandPool(VkDevice&, VkPhysicalDevice&, VkSurfaceKHR&);
+	void createCommandBuffers(VkDevice&, VkExtent2D&);
 
 private:
 	VkPipelineLayout m_vkPipelineLayout;
 	VkRenderPass     m_vkRenderPass;
 	VkPipeline		 m_vkGraphicsPipeline;
 	std::vector<VkFramebuffer> m_vkSwapChainFramebuffers;
+	VkCommandPool	 m_vkCommandPool;
+	std::vector<VkCommandBuffer> m_vkCommandBuffers;
 
 	static std::vector<char> readFile(const std::string& filename);
 	VkShaderModule createShaderModule(const std::vector<char>& code, VkDevice*);

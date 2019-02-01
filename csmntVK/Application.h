@@ -7,10 +7,17 @@
 #include <GLFW/glfw3.h>
 #include <vector>
 #include <cstdlib>
-#include <optional>
+//#include <optional>
 
-#include "vkDetailsStructs.h"
 #include "Graphics.h"
+
+//Swap chain details
+struct SwapChainSupportDetails {
+	VkSurfaceCapabilitiesKHR capabilities;
+	std::vector<VkSurfaceFormatKHR> formats;
+	std::vector<VkPresentModeKHR> presentModes;
+};
+//--------------------
 
 //vkCreateDebugUtilsMessengerEXT function to create the VkDebugUtilsMessengerEXT object. 
 //Unfortunately, because this function is an extension function, it is not automatically loaded. 
@@ -30,16 +37,7 @@ static void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMesse
 		func(instance, debugMessenger, pAllocator);
 	}
 };
-
-//Queue Family Checker
-struct QueueFamilyIndices {
-	std::optional<uint32_t> graphicsFamily;
-	std::optional<uint32_t> presentFamily;
-
-	bool isComplete() {
-		return graphicsFamily.has_value() && presentFamily.has_value();
-	}
-};
+//--------------------
 
 /////////////////////////////////////////////////////
 //---csmntVkApplication:
@@ -78,7 +76,6 @@ private:
 	void createLogicalDevice();
 
 	std::vector<const char*> getRequiredExtensions();
-	QueueFamilyIndices findQueueFamilies(VkPhysicalDevice);
 	bool checkDeviceExtensionSupport(VkPhysicalDevice);
 
 	SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice);

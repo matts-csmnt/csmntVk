@@ -4,6 +4,11 @@
 #include <set>
 #include <algorithm>
 
+#ifndef _vk_details_h
+#define _vk_details_h
+#include "vkDetailsStructs.h"
+#endif
+
 csmntVkApplication::csmntVkApplication(int winW, int winH)
 	: m_winH(winH), m_winW(winW), m_pWindow(nullptr) 
 {
@@ -275,7 +280,7 @@ void csmntVkApplication::createSwapChain()
 	createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
 	//Decide if images are exclusive to queue families or concurrent
-	QueueFamilyIndices indices = findQueueFamilies(m_vkPhysicalDevice);
+	QueueFamilyIndices indices = findQueueFamilies(m_vkPhysicalDevice, m_vkSurface);
 	uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.presentFamily.value() };
 
 	if (indices.graphicsFamily != indices.presentFamily) {
@@ -352,10 +357,17 @@ void csmntVkApplication::createGraphicsPipeline()
 {
 	m_pGraphics = new csmntVkGraphics();
 
+	if (!m_pGraphics)
+	{
+		throw std::runtime_error("failed to create graphics pipeline!");
+		return;
+	}
+
 	m_pGraphics->createRenderPass(m_vkDevice, m_vkSwapChainImageFormat);
 	m_pGraphics->createPipeline(&m_vkDevice, m_vkSwapChainExtent);
 	m_pGraphics->createFramebuffers(m_vkDevice, m_vkSwapChainImageViews, m_vkSwapChainExtent);
-
+	m_pGraphics->createCommandPool(m_vkDevice, m_vkPhysicalDevice, m_vkSurface);
+	m_pGraphics->createCommandBuffers(m_vkDevice, m_vkSwapChainExtent);
 }
 
 void csmntVkApplication::pickPhysicalDevice()
@@ -395,7 +407,7 @@ bool csmntVkApplication::isDeviceSuitable(VkPhysicalDevice device)
 	//Check features here...
 
 	//Check for devices that can handle commands we want to use
-	QueueFamilyIndices indices = findQueueFamilies(device);
+	QueueFamilyIndices indices = findQueueFamilies(device, m_vkSurface);
 
 	//Check supported extensions
 	bool extensionsSupported = checkDeviceExtensionSupport(device);
@@ -413,7 +425,7 @@ bool csmntVkApplication::isDeviceSuitable(VkPhysicalDevice device)
 void csmntVkApplication::createLogicalDevice()
 {
 	//Find and describe a Queue family with GFX capabilities
-	QueueFamilyIndices indices = findQueueFamilies(m_vkPhysicalDevice);
+	QueueFamilyIndices indices = findQueueFamilies(m_vkPhysicalDevice, m_vkSurface);
 
 	std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
 	std::set<uint32_t> uniqueQueueFamilies = { indices.graphicsFamily.value(), indices.presentFamily.value() };
@@ -464,40 +476,6 @@ void csmntVkApplication::createLogicalDevice()
 	//Get the device queue
 	vkGetDeviceQueue(m_vkDevice, indices.graphicsFamily.value(), 0, &m_vkGraphicsQueue);
 	vkGetDeviceQueue(m_vkDevice, indices.presentFamily.value(), 0, &m_vkGraphicsQueue);
-}
-
-QueueFamilyIndices csmntVkApplication::findQueueFamilies(VkPhysicalDevice device)
-{
-	QueueFamilyIndices indices;
-
-	uint32_t queueFamilyCount = 0;
-	vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
-
-	std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
-	vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
-
-	int i = 0;
-	for (const auto& queueFamily : queueFamilies) {
-		
-		if (queueFamily.queueCount > 0 && queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-			indices.graphicsFamily = i;
-		}
-
-		//Window surface support
-		VkBool32 presentSupport = false;
-		vkGetPhysicalDeviceSurfaceSupportKHR(device, i, m_vkSurface, &presentSupport);
-		if (queueFamily.queueCount > 0 && presentSupport) {
-			indices.presentFamily = i;
-		}
-
-		if (indices.isComplete()) {
-			break;
-		}
-
-		i++;
-	}
-
-	return indices;
 }
 
 bool csmntVkApplication::checkDeviceExtensionSupport(VkPhysicalDevice device)

@@ -2,6 +2,11 @@
 #include <fstream>
 #include <iostream>
 
+#ifndef _vk_details_h
+#define _vk_details_h
+#include "vkDetailsStructs.h"
+#endif
+
 csmntVkGraphics::csmntVkGraphics()
 {
 #if _DEBUG
@@ -18,6 +23,8 @@ csmntVkGraphics::~csmntVkGraphics()
 
 void csmntVkGraphics::shutdown(VkDevice& device)
 {
+	vkDestroyCommandPool(device, m_vkCommandPool, nullptr);
+
 	for (auto framebuffer : m_vkSwapChainFramebuffers) {
 		vkDestroyFramebuffer(device, framebuffer, nullptr);
 	}
@@ -274,6 +281,86 @@ void csmntVkGraphics::createFramebuffers(VkDevice& device, std::vector<VkImageVi
 
 		if (vkCreateFramebuffer(device, &framebufferInfo, nullptr, &m_vkSwapChainFramebuffers[i]) != VK_SUCCESS) {
 			throw std::runtime_error("failed to create framebuffer!");
+		}
+	}
+}
+
+void csmntVkGraphics::createCommandPool(VkDevice& device, VkPhysicalDevice& physicalDevice, VkSurfaceKHR& surface)
+{
+	QueueFamilyIndices queueFamilyIndices = findQueueFamilies(physicalDevice, surface);
+
+	VkCommandPoolCreateInfo poolInfo = {};
+	poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+	poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value();
+	poolInfo.flags = 0; // Optional
+
+	//VK_COMMAND_POOL_CREATE_TRANSIENT_BIT: 
+	//Hint that command buffers are rerecorded with new commands very often 
+	//(may change memory allocation behavior)
+	//VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT: 
+	//Allow command buffers to be rerecorded individually, without this flag 
+	//they all have to be reset together
+	//(https://vulkan-tutorial.com/Drawing_a_triangle/Drawing/Command_buffers)
+
+	if (vkCreateCommandPool(device, &poolInfo, nullptr, &m_vkCommandPool) != VK_SUCCESS) {
+		throw std::runtime_error("failed to create command pool!");
+	}
+}
+
+void csmntVkGraphics::createCommandBuffers(VkDevice& device, VkExtent2D& swapChainExtent)
+{
+	m_vkCommandBuffers.resize(m_vkSwapChainFramebuffers.size());
+
+	VkCommandBufferAllocateInfo allocInfo = {};
+	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	allocInfo.commandPool = m_vkCommandPool;
+	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	allocInfo.commandBufferCount = (uint32_t)m_vkCommandBuffers.size();
+
+	//VK_COMMAND_BUFFER_LEVEL_PRIMARY: Can be submitted to a queue for execution, 
+	//but cannot be called from other command buffers.
+	//VK_COMMAND_BUFFER_LEVEL_SECONDARY: Cannot be submitted directly, but can be 
+	//called from primary command buffers.
+	//(https://vulkan-tutorial.com/Drawing_a_triangle/Drawing/Command_buffers)
+
+	if (vkAllocateCommandBuffers(device, &allocInfo, m_vkCommandBuffers.data()) != VK_SUCCESS) {
+		throw std::runtime_error("failed to allocate command buffers!");
+	}
+
+	//Record comand buffers
+	for (size_t i = 0; i < m_vkCommandBuffers.size(); i++) {
+		VkCommandBufferBeginInfo beginInfo = {};
+		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+		beginInfo.pInheritanceInfo = nullptr; // Optional
+
+		if (vkBeginCommandBuffer(m_vkCommandBuffers[i], &beginInfo) != VK_SUCCESS) {
+			throw std::runtime_error("failed to begin recording command buffer!");
+		}
+
+		//Render Pass
+		VkRenderPassBeginInfo renderPassInfo = {};
+		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+		renderPassInfo.renderPass = m_vkRenderPass;
+		renderPassInfo.framebuffer = m_vkSwapChainFramebuffers[i];
+		renderPassInfo.renderArea.offset = { 0, 0 };
+		renderPassInfo.renderArea.extent = swapChainExtent;
+
+		//Clear to Black
+		VkClearValue clearColor = { 0.0f, 0.0f, 0.0f, 1.0f };
+		renderPassInfo.clearValueCount = 1;
+		renderPassInfo.pClearValues = &clearColor;
+
+		vkCmdBeginRenderPass(m_vkCommandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+		vkCmdBindPipeline(m_vkCommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_vkGraphicsPipeline);
+
+		vkCmdDraw(m_vkCommandBuffers[i], 3, 1, 0, 0);
+
+		vkCmdEndRenderPass(m_vkCommandBuffers[i]);
+
+		if (vkEndCommandBuffer(m_vkCommandBuffers[i]) != VK_SUCCESS) {
+			throw std::runtime_error("failed to record command buffer!");
 		}
 	}
 }
