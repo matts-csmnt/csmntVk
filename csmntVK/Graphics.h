@@ -2,6 +2,7 @@
 #ifndef _VK_GRAPHICS_CLASS_
 #define _VK_GRAPHICS_CLASS_
 
+#include <GLFW/glfw3.h>
 #include <vulkan/vulkan.h>
 #include <vector>
 
@@ -20,13 +21,21 @@ public:
 	csmntVkGraphics& operator=(const csmntVkGraphics&) = delete;
 
 	void shutdown(VkDevice&);
-	void initGraphicsModule(VkDevice&,VkPhysicalDevice&, VkSurfaceKHR&, const int, const int, SwapChainSupportDetails&);
-	void drawFrame(VkDevice&, VkQueue&, VkQueue&);
+
+	void initGraphicsModule(VkDevice&,VkPhysicalDevice&, VkSurfaceKHR&,
+							SwapChainSupportDetails&, GLFWwindow*);
+	
+	void drawFrame(VkDevice&, VkQueue&, VkQueue&, VkPhysicalDevice&, 
+							VkSurfaceKHR&, SwapChainSupportDetails&, 
+							GLFWwindow*, bool&);
+
+	void recreateSwapChain(VkDevice&, VkPhysicalDevice&, VkSurfaceKHR&,
+							SwapChainSupportDetails&, GLFWwindow*);
 
 private:
 	//How many frames should be processed concurrently?
-	const int m_MAX_FRAMES_IN_FLIGHT = 2;
-	size_t currentFrame = 0;
+	const int					m_MAX_FRAMES_IN_FLIGHT = 2;
+	size_t						m_currentFrame = 0;
 
 	VkSwapchainKHR				m_vkSwapChain;
 	std::vector<VkImage>		m_vkSwapChainImages;
@@ -41,12 +50,16 @@ private:
 	VkCommandPool				m_vkCommandPool;
 	std::vector<VkCommandBuffer> m_vkCommandBuffers;
 
-	std::vector<VkSemaphore> m_vkImageAvailableSemaphores;
-	std::vector<VkSemaphore> m_vkRenderFinishedSemaphores;
-	std::vector<VkFence> m_vkInFlightFences;
+	std::vector<VkSemaphore>	m_vkImageAvailableSemaphores;
+	std::vector<VkSemaphore>	m_vkRenderFinishedSemaphores;
+	std::vector<VkFence>		m_vkInFlightFences;
 
-	void createSwapChain(VkDevice&, VkPhysicalDevice&, VkSurfaceKHR&, const int, const int, SwapChainSupportDetails&);
+	void createSwapChain(VkDevice&, VkPhysicalDevice&, VkSurfaceKHR&, 
+								SwapChainSupportDetails&, GLFWwindow*);
+
 	void createImageViews(VkDevice&);
+
+	void cleanupSwapChain(VkDevice&);
 
 	void createPipeline(VkDevice&);
 	void createRenderPass(VkDevice&);
@@ -57,7 +70,7 @@ private:
 
 	VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>&);
 	VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>);
-	VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR&, const int, const int);
+	VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR&, GLFWwindow*);
 
 	static std::vector<char> readFile(const std::string& filename);
 	VkShaderModule createShaderModule(const std::vector<char>& code, VkDevice*);

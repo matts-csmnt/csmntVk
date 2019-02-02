@@ -14,7 +14,13 @@ int main() {
 	csmntVkApplication* p_application = new csmntVkApplication(800, 600);
 
 	//Run the application
-	p_application->run();
+	try {
+		p_application->run();
+	}
+	catch (const std::exception& e) {
+		std::cerr << e.what() << std::endl;
+		return EXIT_FAILURE;
+	}
 
 	//cleanup
 	if (p_application)
@@ -23,5 +29,5 @@ int main() {
 		p_application = nullptr;
 	}
 
-	return 0;
+	return EXIT_SUCCESS;
 }

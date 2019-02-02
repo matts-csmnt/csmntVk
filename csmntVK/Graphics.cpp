@@ -13,19 +13,21 @@
 csmntVkGraphics::csmntVkGraphics()
 {
 #if _DEBUG
-	std::cout << "csmntVK Graphics Module Create" << std::endl;
+	std::cout << "HEY! csmntVK Graphics Module Created" << std::endl;
 #endif
 }
 
 csmntVkGraphics::~csmntVkGraphics()
 {
 #if _DEBUG
-	std::cout << "csmntVK Graphics Module Destroy" << std::endl;
+	std::cout << "HEY! csmntVK Graphics Module Destroyed" << std::endl;
 #endif
 }
 
 void csmntVkGraphics::shutdown(VkDevice& device)
 {
+	cleanupSwapChain(device);
+
 	for (size_t i = 0; i < m_MAX_FRAMES_IN_FLIGHT; i++) {
 		vkDestroySemaphore(device, m_vkRenderFinishedSemaphores[i], nullptr);
 		vkDestroySemaphore(device, m_vkImageAvailableSemaphores[i], nullptr);
@@ -33,27 +35,13 @@ void csmntVkGraphics::shutdown(VkDevice& device)
 	}
 
 	vkDestroyCommandPool(device, m_vkCommandPool, nullptr);
-
-	for (auto framebuffer : m_vkSwapChainFramebuffers) {
-		vkDestroyFramebuffer(device, framebuffer, nullptr);
-	}
-
-	vkDestroyPipeline(device, m_vkGraphicsPipeline, nullptr);
-	vkDestroyPipelineLayout(device, m_vkPipelineLayout, nullptr);
-	vkDestroyRenderPass(device, m_vkRenderPass, nullptr);
-
-	for (auto imageView : m_vkSwapChainImageViews) {
-		vkDestroyImageView(device, imageView, nullptr);
-	}
-
-	vkDestroySwapchainKHR(device, m_vkSwapChain, nullptr);
 }
 
 void csmntVkGraphics::initGraphicsModule(VkDevice& device, VkPhysicalDevice& physicalDevice, VkSurfaceKHR& surface, 
-											 const int width, const int height, SwapChainSupportDetails& scSupportDetails)
+										 SwapChainSupportDetails& scSupportDetails, GLFWwindow* window)
 {
 	//Create all required functionality for graphics pipeline
-	createSwapChain(device, physicalDevice, surface, width, height, scSupportDetails);
+	createSwapChain(device, physicalDevice, surface, scSupportDetails, window);
 	createImageViews(device);
 
 	createRenderPass(device);
@@ -433,19 +421,34 @@ void csmntVkGraphics::createSemaphoresAndFences(VkDevice& device)
 	}
 }
 
-void csmntVkGraphics::drawFrame(VkDevice& device, VkQueue& graphicsQueue, VkQueue& presentQueue)
+void csmntVkGraphics::drawFrame(VkDevice& device, VkQueue& graphicsQueue, VkQueue& presentQueue,
+								VkPhysicalDevice& physicalDevice, VkSurfaceKHR& surface,
+								SwapChainSupportDetails& swapChainSupport, GLFWwindow* window,
+								bool& isFramebufferResized)
 {
+	VkResult result;
+
 	//Wait for frame to finish before continuing with another
-	vkWaitForFences(device, 1, &m_vkInFlightFences[currentFrame], VK_TRUE, std::numeric_limits<uint64_t>::max());
-	vkResetFences(device, 1, &m_vkInFlightFences[currentFrame]);
+	vkWaitForFences(device, 1, &m_vkInFlightFences[m_currentFrame], VK_TRUE, std::numeric_limits<uint64_t>::max());
 
 	uint32_t imageIndex;
-	vkAcquireNextImageKHR(device, m_vkSwapChain, std::numeric_limits<uint64_t>::max(), m_vkImageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
+	result = vkAcquireNextImageKHR(device, m_vkSwapChain, std::numeric_limits<uint64_t>::max(), m_vkImageAvailableSemaphores[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
+
+	//check if swapchain needs recreation
+	if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+		isFramebufferResized = false;
+
+		recreateSwapChain(device,physicalDevice,surface,swapChainSupport,window);
+		return;
+	}
+	else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+		throw std::runtime_error("failed to acquire swap chain image!");
+	}
 
 	VkSubmitInfo submitInfo = {};
 	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-	VkSemaphore waitSemaphores[] = { m_vkImageAvailableSemaphores[currentFrame] };
+	VkSemaphore waitSemaphores[] = { m_vkImageAvailableSemaphores[m_currentFrame] };
 	VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
 	submitInfo.waitSemaphoreCount = 1;
 	submitInfo.pWaitSemaphores = waitSemaphores;
@@ -455,12 +458,15 @@ void csmntVkGraphics::drawFrame(VkDevice& device, VkQueue& graphicsQueue, VkQueu
 	submitInfo.commandBufferCount = 1;
 	submitInfo.pCommandBuffers = &m_vkCommandBuffers[imageIndex];
 
-	VkSemaphore signalSemaphores[] = { m_vkRenderFinishedSemaphores[currentFrame] };
+	VkSemaphore signalSemaphores[] = { m_vkRenderFinishedSemaphores[m_currentFrame] };
 	submitInfo.signalSemaphoreCount = 1;
 	submitInfo.pSignalSemaphores = signalSemaphores;
 
+	//Reset the fences after we check for swapchain recreation etc...
+	vkResetFences(device, 1, &m_vkInFlightFences[m_currentFrame]);
+
 	//submit queue and signal fence
-	if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, m_vkInFlightFences[currentFrame]) != VK_SUCCESS) {
+	if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, m_vkInFlightFences[m_currentFrame]) != VK_SUCCESS) {
 		throw std::runtime_error("failed to submit draw command buffer!");
 	}
 
@@ -481,18 +487,57 @@ void csmntVkGraphics::drawFrame(VkDevice& device, VkQueue& graphicsQueue, VkQueu
 	//(https://vulkan-tutorial.com/Drawing_a_triangle/Drawing/Rendering_and_presentation)
 	presentInfo.pResults = nullptr; // Optional
 
-	vkQueuePresentKHR(presentQueue, &presentInfo);
+	result = vkQueuePresentKHR(presentQueue, &presentInfo);
+
+	//check swapchain again
+	if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || isFramebufferResized) {
+		isFramebufferResized = false;
+		recreateSwapChain(device, physicalDevice, surface, swapChainSupport, window);
+	}
+	else if (result != VK_SUCCESS) {
+		throw std::runtime_error("failed to present swap chain image!");
+	}
 
 	//Advance frame
-	currentFrame = (currentFrame + 1) % m_MAX_FRAMES_IN_FLIGHT;
+	m_currentFrame = (m_currentFrame + 1) % m_MAX_FRAMES_IN_FLIGHT;
+}
+
+void csmntVkGraphics::recreateSwapChain(VkDevice& device, VkPhysicalDevice& physicalDevice, VkSurfaceKHR& surface,
+										SwapChainSupportDetails& swapChainSupport, GLFWwindow* window)
+{
+	//Check for minimized window state
+	int width = 0, height = 0;
+	while (width == 0 || height == 0) {
+		glfwGetFramebufferSize(window, &width, &height);
+		glfwWaitEvents();
+	}
+
+	//Recreate the swap chain if window surface changes to non compatible
+	vkDeviceWaitIdle(device);
+
+	//cleanup
+	cleanupSwapChain(device);
+
+	createSwapChain(device, physicalDevice, surface, swapChainSupport, window);
+	createImageViews(device);
+	createRenderPass(device);
+	createPipeline(device);
+	createFramebuffers(device);
+	createCommandBuffers(device);
+
+#if _DEBUG
+	static size_t creations = 0;
+	++creations;
+	std::cout << "HEY! recreated the swap chain [" << creations << " times]" << std::endl;
+#endif
 }
 
 void csmntVkGraphics::createSwapChain(VkDevice& device, VkPhysicalDevice& physicalDevice, VkSurfaceKHR& surface, 
-									  const int width, const int height, SwapChainSupportDetails& swapChainSupport)
+									  SwapChainSupportDetails& swapChainSupport, GLFWwindow* window)
 {
 	VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
 	VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
-	VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities, width, height);
+	VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities, window);
 
 	//Images in the swap chain -- try settle for min + 1, else just go for max
 	uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
@@ -588,6 +633,28 @@ void csmntVkGraphics::createImageViews(VkDevice& device)
 	}
 }
 
+void csmntVkGraphics::cleanupSwapChain(VkDevice& device)
+{
+	//Destroy all framebuffers
+	for (auto framebuffer : m_vkSwapChainFramebuffers) {
+		vkDestroyFramebuffer(device, framebuffer, nullptr);
+	}
+
+	//free up command buffers
+	vkFreeCommandBuffers(device, m_vkCommandPool, static_cast<uint32_t>(m_vkCommandBuffers.size()), m_vkCommandBuffers.data());
+
+	vkDestroyPipeline(device, m_vkGraphicsPipeline, nullptr);
+	vkDestroyPipelineLayout(device, m_vkPipelineLayout, nullptr);
+	vkDestroyRenderPass(device, m_vkRenderPass, nullptr);
+
+	//destroy all image views
+	for (auto imageView : m_vkSwapChainImageViews) {
+		vkDestroyImageView(device, imageView, nullptr);
+	}
+
+	vkDestroySwapchainKHR(device, m_vkSwapChain, nullptr);
+}
+
 std::vector<char> csmntVkGraphics::readFile(const std::string & filename)
 {
 	std::ifstream file(filename, std::ios::ate | std::ios::binary);
@@ -662,14 +729,19 @@ VkPresentModeKHR csmntVkGraphics::chooseSwapPresentMode(const std::vector<VkPres
 	return bestMode;
 }
 
-VkExtent2D csmntVkGraphics::chooseSwapExtent(const VkSurfaceCapabilitiesKHR & capabilities, const int width, const int height)
+VkExtent2D csmntVkGraphics::chooseSwapExtent(const VkSurfaceCapabilitiesKHR & capabilities, GLFWwindow* window)
 {
 	//swap chain resolution - usually winwow res, but we can sometimes do better
 	if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
 		return capabilities.currentExtent;
 	}
 	else {
-		VkExtent2D actualExtent = { width, height };
+		int width, height;
+
+		//get the actual frame buffer size
+		glfwGetFramebufferSize(window, &width, &height);
+
+		VkExtent2D actualExtent = { static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
 
 		actualExtent.width = std::max(capabilities.minImageExtent.width, std::min(capabilities.maxImageExtent.width, actualExtent.width));
 		actualExtent.height = std::max(capabilities.minImageExtent.height, std::min(capabilities.maxImageExtent.height, actualExtent.height));

@@ -71,13 +71,16 @@ private:
 	SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice&);
 
 	static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
-		VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-		VkDebugUtilsMessageTypeFlagsEXT messageType,
-		const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-		void* pUserData);
+		VkDebugUtilsMessageSeverityFlagBitsEXT,
+		VkDebugUtilsMessageTypeFlagsEXT,
+		const VkDebugUtilsMessengerCallbackDataEXT*,
+		void*);
+
+	static void framebufferResizeCallback(GLFWwindow*, int, int);
 
 	//Window Height & Width (800 x 600 default)
 	int m_winH = 600, m_winW = 800;
+	bool						m_frameBufferResized = false;
 
 	GLFWwindow*					m_pWindow;
 	VkInstance					m_vkInstance;
@@ -92,10 +95,13 @@ private:
 	csmntVkGraphics*			m_pGraphics;
 
 	//Validation Layers
-	std::vector<const char*> m_validationLayers;
+	std::vector<const char*>	m_validationLayers;
 
 	//Required device extensions
-	std::vector<const char*> m_deviceExtensions;
+	std::vector<const char*>	m_deviceExtensions;
+
+	//Store swap chain support details for multiple use
+	SwapChainSupportDetails		m_swapChainSupport;
 
 #ifdef NDEBUG
 	const bool m_enableValidationLayers = false;

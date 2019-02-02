@@ -10,7 +10,7 @@
 #endif
 
 csmntVkApplication::csmntVkApplication(int winW, int winH)
-	: m_winH(winH), m_winW(winW), m_pWindow(nullptr) 
+	: m_winW(winW), m_winH(winH), m_pWindow(nullptr)
 {
 	//Add a validation layer
 	m_validationLayers.push_back("VK_LAYER_LUNARG_standard_validation");
@@ -19,14 +19,14 @@ csmntVkApplication::csmntVkApplication(int winW, int winH)
 	m_deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 
 #if _DEBUG
-	std::cout << "csmntVK Application Create" << std::endl;
+	std::cout << "HEY! csmntVK Application Created" << std::endl;
 #endif
 }
 
 csmntVkApplication::~csmntVkApplication()
 {
 #if _DEBUG
-	std::cout << "csmntVK Application Destroy" << std::endl;
+	std::cout << "HEY! csmntVK Application Destroyed" << std::endl;
 #endif
 }
 
@@ -50,7 +50,8 @@ void csmntVkApplication::mainLoop()
 		glfwPollEvents();
 
 		//Render Frame
-		m_pGraphics->drawFrame(m_vkDevice, m_vkGraphicsQueue, m_vkPresentQueue);
+		m_pGraphics->drawFrame(m_vkDevice, m_vkGraphicsQueue, m_vkPresentQueue, m_vkPhysicalDevice, 
+								m_vkSurface, m_swapChainSupport, m_pWindow, m_frameBufferResized);
 
 		//all of the operations in drawFrame are asynchronous. That means that when we exit the 
 		//loop in mainLoop, drawing and presentation operations may still be going on. Cleaning 
@@ -70,8 +71,10 @@ void csmntVkApplication::initGraphicsModule()
 		return;
 	}
 
-	SwapChainSupportDetails scSD = querySwapChainSupport(m_vkPhysicalDevice);
-	m_pGraphics->initGraphicsModule(m_vkDevice, m_vkPhysicalDevice, m_vkSurface, m_winW, m_winH, scSD);
+	//Store the swap chain support values we wil use to create the graphics pipeline
+	m_swapChainSupport = querySwapChainSupport(m_vkPhysicalDevice);
+
+	m_pGraphics->initGraphicsModule(m_vkDevice, m_vkPhysicalDevice, m_vkSurface, m_swapChainSupport, m_pWindow);
 }
 
 void csmntVkApplication::shutdown()
@@ -82,12 +85,6 @@ void csmntVkApplication::shutdown()
 		delete m_pGraphics;
 		m_pGraphics = nullptr;
 	}
-
-	//for (auto imageView : m_vkSwapChainImageViews) {
-	//	vkDestroyImageView(m_vkDevice, imageView, nullptr);
-	//}
-
-	//vkDestroySwapchainKHR(m_vkDevice, m_vkSwapChain, nullptr);
 
 	vkDestroyDevice(m_vkDevice, nullptr);
 
@@ -131,14 +128,15 @@ void csmntVkApplication::initWindow()
 	//Window to be created WITHOUT openGL context
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
-	//Not resizable (TODO: fix this)
-	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-
 	//Create and store our window
 	m_pWindow = glfwCreateWindow(m_winW, m_winH, "csmntVK - Vulkan Framework", nullptr, nullptr);
 
+	//Set the framebuffer resize callback
+	glfwSetWindowUserPointer(m_pWindow, this);
+	glfwSetFramebufferSizeCallback(m_pWindow, framebufferResizeCallback);
+
 #if _DEBUG
-	std::cout << "glfw window instance created" << std::endl;
+	std::cout << "HEY! glfw window instance created" << std::endl;
 #endif
 }
 
@@ -248,7 +246,7 @@ void csmntVkApplication::createVkInstance()
 	}
 
 #if _DEBUG
-	std::cout << "vulkan instance created" << std::endl;
+	std::cout << "HEY! vulkan instance created" << std::endl;
 
 	//List vulkan extensions
 	std::cout << "available vk extensions:" << std::endl;
@@ -426,4 +424,9 @@ VKAPI_ATTR VkBool32 VKAPI_CALL csmntVkApplication::debugCallback(VkDebugUtilsMes
 	std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
 
 	return VK_FALSE;
+}
+
+void csmntVkApplication::framebufferResizeCallback(GLFWwindow* window, int width, int height) {
+	auto app = reinterpret_cast<csmntVkApplication*>(glfwGetWindowUserPointer(window));
+	app->m_frameBufferResized = true;
 }
