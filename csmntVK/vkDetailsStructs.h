@@ -4,7 +4,16 @@
 
 #include <optional>
 
-//Queue family indices
+//Swap chain details------------
+struct SwapChainSupportDetails {
+	VkSurfaceCapabilitiesKHR capabilities;
+	std::vector<VkSurfaceFormatKHR> formats;
+	std::vector<VkPresentModeKHR> presentModes;
+};
+//-----------------------------
+
+
+//Queue family indices---------
 struct QueueFamilyIndices {
 	std::optional<uint32_t> graphicsFamily;
 	std::optional<uint32_t> presentFamily;
@@ -47,5 +56,6 @@ static QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKH
 
 	return indices;
 };
+//-----------------------------
 
 #endif

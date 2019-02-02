@@ -5,13 +5,7 @@
 #include <vulkan/vulkan.h>
 #include <vector>
 
-//Swap chain details
-struct SwapChainSupportDetails {
-	VkSurfaceCapabilitiesKHR capabilities;
-	std::vector<VkSurfaceFormatKHR> formats;
-	std::vector<VkPresentModeKHR> presentModes;
-};
-//--------------------
+#include "vkDetailsStructs.h"
 
 /////////////////////////////////////////////////////
 //---csmntVkGraphics:
@@ -26,8 +20,7 @@ public:
 	csmntVkGraphics& operator=(const csmntVkGraphics&) = delete;
 
 	void shutdown(VkDevice&);
-	void createGraphicsPipeline(VkDevice&,VkPhysicalDevice&, VkSurfaceKHR&, const int, const int);
-
+	void initGraphicsModule(VkDevice&,VkPhysicalDevice&, VkSurfaceKHR&, const int, const int, SwapChainSupportDetails&);
 	void drawFrame(VkDevice&, VkQueue&, VkQueue&);
 
 private:
@@ -52,17 +45,16 @@ private:
 	std::vector<VkSemaphore> m_vkRenderFinishedSemaphores;
 	std::vector<VkFence> m_vkInFlightFences;
 
-	void createSwapChain(VkDevice&, VkPhysicalDevice&, VkSurfaceKHR&, const int, const int);
+	void createSwapChain(VkDevice&, VkPhysicalDevice&, VkSurfaceKHR&, const int, const int, SwapChainSupportDetails&);
 	void createImageViews(VkDevice&);
 
 	void createPipeline(VkDevice&);
 	void createRenderPass(VkDevice&);
-	void createFramebuffers(VkDevice&, VkExtent2D&);
+	void createFramebuffers(VkDevice&);
 	void createCommandPool(VkDevice&, VkPhysicalDevice&, VkSurfaceKHR&);
-	void createCommandBuffers(VkDevice&, VkExtent2D&);
+	void createCommandBuffers(VkDevice&);
 	void createSemaphoresAndFences(VkDevice&);
 
-	SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice&, VkSurfaceKHR&);
 	VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>&);
 	VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>);
 	VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR&, const int, const int);

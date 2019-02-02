@@ -41,19 +41,28 @@ void csmntVkGraphics::shutdown(VkDevice& device)
 	vkDestroyPipeline(device, m_vkGraphicsPipeline, nullptr);
 	vkDestroyPipelineLayout(device, m_vkPipelineLayout, nullptr);
 	vkDestroyRenderPass(device, m_vkRenderPass, nullptr);
+
+	for (auto imageView : m_vkSwapChainImageViews) {
+		vkDestroyImageView(device, imageView, nullptr);
+	}
+
+	vkDestroySwapchainKHR(device, m_vkSwapChain, nullptr);
 }
 
-void csmntVkGraphics::createGraphicsPipeline(VkDevice& device, VkPhysicalDevice& physicalDevice, VkSurfaceKHR& surface, 
-											 const int width, const int height)
+void csmntVkGraphics::initGraphicsModule(VkDevice& device, VkPhysicalDevice& physicalDevice, VkSurfaceKHR& surface, 
+											 const int width, const int height, SwapChainSupportDetails& scSupportDetails)
 {
-	createSwapChain(device, physicalDevice, surface, width, height);
+	//Create all required functionality for graphics pipeline
+	createSwapChain(device, physicalDevice, surface, width, height, scSupportDetails);
 	createImageViews(device);
 
 	createRenderPass(device);
 	createPipeline(device);
-	createFramebuffers(device, m_vkSwapChainExtent);
+	createFramebuffers(device);
+
 	createCommandPool(device, physicalDevice, surface);
-	createCommandBuffers(device, m_vkSwapChainExtent);
+	createCommandBuffers(device);
+
 	createSemaphoresAndFences(device);
 }
 
@@ -296,7 +305,7 @@ void csmntVkGraphics::createRenderPass(VkDevice& device)
 	}
 }
 
-void csmntVkGraphics::createFramebuffers(VkDevice& device, VkExtent2D& swapChainExtent)
+void csmntVkGraphics::createFramebuffers(VkDevice& device)
 {
 	m_vkSwapChainFramebuffers.resize(m_vkSwapChainImageViews.size());
 
@@ -310,8 +319,8 @@ void csmntVkGraphics::createFramebuffers(VkDevice& device, VkExtent2D& swapChain
 		framebufferInfo.renderPass = m_vkRenderPass;
 		framebufferInfo.attachmentCount = 1;
 		framebufferInfo.pAttachments = attachments;
-		framebufferInfo.width = swapChainExtent.width;
-		framebufferInfo.height = swapChainExtent.height;
+		framebufferInfo.width = m_vkSwapChainExtent.width;
+		framebufferInfo.height = m_vkSwapChainExtent.height;
 		framebufferInfo.layers = 1;
 
 		if (vkCreateFramebuffer(device, &framebufferInfo, nullptr, &m_vkSwapChainFramebuffers[i]) != VK_SUCCESS) {
@@ -342,7 +351,7 @@ void csmntVkGraphics::createCommandPool(VkDevice& device, VkPhysicalDevice& phys
 	}
 }
 
-void csmntVkGraphics::createCommandBuffers(VkDevice& device, VkExtent2D& swapChainExtent)
+void csmntVkGraphics::createCommandBuffers(VkDevice& device)
 {
 	m_vkCommandBuffers.resize(m_vkSwapChainFramebuffers.size());
 
@@ -379,7 +388,7 @@ void csmntVkGraphics::createCommandBuffers(VkDevice& device, VkExtent2D& swapCha
 		renderPassInfo.renderPass = m_vkRenderPass;
 		renderPassInfo.framebuffer = m_vkSwapChainFramebuffers[i];
 		renderPassInfo.renderArea.offset = { 0, 0 };
-		renderPassInfo.renderArea.extent = swapChainExtent;
+		renderPassInfo.renderArea.extent = m_vkSwapChainExtent;
 
 		//Clear to Black
 		VkClearValue clearColor = { 0.0f, 0.0f, 0.0f, 1.0f };
@@ -478,11 +487,9 @@ void csmntVkGraphics::drawFrame(VkDevice& device, VkQueue& graphicsQueue, VkQueu
 	currentFrame = (currentFrame + 1) % m_MAX_FRAMES_IN_FLIGHT;
 }
 
-void csmntVkGraphics::createSwapChain(VkDevice& device, VkPhysicalDevice& physicalDevice, VkSurfaceKHR& surface, const int width, const int height)
+void csmntVkGraphics::createSwapChain(VkDevice& device, VkPhysicalDevice& physicalDevice, VkSurfaceKHR& surface, 
+									  const int width, const int height, SwapChainSupportDetails& swapChainSupport)
 {
-	//find supported swap chain info
-	SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice, surface);
-
 	VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
 	VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
 	VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities, width, height);
@@ -612,34 +619,6 @@ VkShaderModule csmntVkGraphics::createShaderModule(const std::vector<char>& code
 	}
 
 	return shaderModule;
-}
-
-SwapChainSupportDetails csmntVkGraphics::querySwapChainSupport(VkPhysicalDevice& device, VkSurfaceKHR& surface)
-{
-	SwapChainSupportDetails details;
-
-	//Basic surface capabilities
-	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
-
-	//Formats
-	uint32_t formatCount;
-	vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, nullptr);
-
-	if (formatCount != 0) {
-		details.formats.resize(formatCount);
-		vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, details.formats.data());
-	}
-
-	//Presentation modes
-	uint32_t presentModeCount;
-	vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, nullptr);
-
-	if (presentModeCount != 0) {
-		details.presentModes.resize(presentModeCount);
-		vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, details.presentModes.data());
-	}
-
-	return details;
 }
 
 VkSurfaceFormatKHR csmntVkGraphics::chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats)

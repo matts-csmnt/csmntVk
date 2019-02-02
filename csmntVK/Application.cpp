@@ -60,7 +60,7 @@ void csmntVkApplication::mainLoop()
 	}
 }
 
-void csmntVkApplication::createGraphicsPipeline()
+void csmntVkApplication::initGraphicsModule()
 {
 	m_pGraphics = new csmntVkGraphics();
 
@@ -70,7 +70,8 @@ void csmntVkApplication::createGraphicsPipeline()
 		return;
 	}
 
-	m_pGraphics->createGraphicsPipeline(m_vkDevice, m_vkPhysicalDevice, m_vkSurface, m_winW, m_winH);
+	SwapChainSupportDetails scSD = querySwapChainSupport(m_vkPhysicalDevice);
+	m_pGraphics->initGraphicsModule(m_vkDevice, m_vkPhysicalDevice, m_vkSurface, m_winW, m_winH, scSD);
 }
 
 void csmntVkApplication::shutdown()
@@ -82,11 +83,11 @@ void csmntVkApplication::shutdown()
 		m_pGraphics = nullptr;
 	}
 
-	for (auto imageView : m_vkSwapChainImageViews) {
-		vkDestroyImageView(m_vkDevice, imageView, nullptr);
-	}
+	//for (auto imageView : m_vkSwapChainImageViews) {
+	//	vkDestroyImageView(m_vkDevice, imageView, nullptr);
+	//}
 
-	vkDestroySwapchainKHR(m_vkDevice, m_vkSwapChain, nullptr);
+	//vkDestroySwapchainKHR(m_vkDevice, m_vkSwapChain, nullptr);
 
 	vkDestroyDevice(m_vkDevice, nullptr);
 
@@ -118,8 +119,8 @@ void csmntVkApplication::initVulkan()
 	//Create Logical device to interface with GFX card
 	createLogicalDevice();
 
-	//Create the graphics pipeline
-	createGraphicsPipeline();
+	//Create the graphics module
+	initGraphicsModule();
 }
 
 void csmntVkApplication::initWindow()
@@ -390,6 +391,34 @@ bool csmntVkApplication::checkDeviceExtensionSupport(VkPhysicalDevice device)
 	}
 
 	return requiredExtensions.empty();
+}
+
+SwapChainSupportDetails csmntVkApplication::querySwapChainSupport(VkPhysicalDevice& device)
+{
+	SwapChainSupportDetails details;
+
+	//Basic surface capabilities
+	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, m_vkSurface, &details.capabilities);
+
+	//Formats
+	uint32_t formatCount;
+	vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_vkSurface, &formatCount, nullptr);
+
+	if (formatCount != 0) {
+		details.formats.resize(formatCount);
+		vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_vkSurface, &formatCount, details.formats.data());
+	}
+
+	//Presentation modes
+	uint32_t presentModeCount;
+	vkGetPhysicalDeviceSurfacePresentModesKHR(device, m_vkSurface, &presentModeCount, nullptr);
+
+	if (presentModeCount != 0) {
+		details.presentModes.resize(presentModeCount);
+		vkGetPhysicalDeviceSurfacePresentModesKHR(device, m_vkSurface, &presentModeCount, details.presentModes.data());
+	}
+
+	return details;
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL csmntVkApplication::debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT * pCallbackData, void * pUserData)
