@@ -50,8 +50,9 @@ void csmntVkApplication::mainLoop()
 		glfwPollEvents();
 
 		//Render Frame
+		SwapChainSupportDetails swapChainSupport = querySwapChainSupport(m_vkPhysicalDevice);
 		m_pGraphics->drawFrame(m_vkDevice, m_vkGraphicsQueue, m_vkPresentQueue, m_vkPhysicalDevice, 
-								m_vkSurface, m_swapChainSupport, m_pWindow, m_frameBufferResized);
+								m_vkSurface, swapChainSupport, m_pWindow, m_frameBufferResized);
 
 		//all of the operations in drawFrame are asynchronous. That means that when we exit the 
 		//loop in mainLoop, drawing and presentation operations may still be going on. Cleaning 
@@ -71,10 +72,9 @@ void csmntVkApplication::initGraphicsModule()
 		return;
 	}
 
-	//Store the swap chain support values we wil use to create the graphics pipeline
-	m_swapChainSupport = querySwapChainSupport(m_vkPhysicalDevice);
+	SwapChainSupportDetails swapChainSupport = querySwapChainSupport(m_vkPhysicalDevice);
 
-	m_pGraphics->initGraphicsModule(m_vkDevice, m_vkPhysicalDevice, m_vkSurface, m_swapChainSupport, m_pWindow);
+	m_pGraphics->initGraphicsModule(m_vkDevice, m_vkPhysicalDevice, m_vkSurface, swapChainSupport, m_pWindow);
 }
 
 void csmntVkApplication::shutdown()

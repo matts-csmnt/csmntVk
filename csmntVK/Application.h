@@ -100,9 +100,6 @@ private:
 	//Required device extensions
 	std::vector<const char*>	m_deviceExtensions;
 
-	//Store swap chain support details for multiple use
-	SwapChainSupportDetails		m_swapChainSupport;
-
 #ifdef NDEBUG
 	const bool m_enableValidationLayers = false;
 #else
