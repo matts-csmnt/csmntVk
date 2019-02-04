@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "vkDetailsStructs.h"
+#include "Model.h"
 
 /////////////////////////////////////////////////////
 //---csmntVkGraphics:
@@ -54,6 +55,12 @@ private:
 	std::vector<VkSemaphore>	m_vkRenderFinishedSemaphores;
 	std::vector<VkFence>		m_vkInFlightFences;
 
+	VkBuffer					m_vkVertexBuffer;
+	VkDeviceMemory				m_vkVertexBufferMemory;
+
+	//Models
+	Model*						m_pModel;
+
 	void createSwapChain(VkDevice&, VkPhysicalDevice&, VkSurfaceKHR&, 
 								SwapChainSupportDetails&, GLFWwindow*);
 
@@ -65,8 +72,11 @@ private:
 	void createRenderPass(VkDevice&);
 	void createFramebuffers(VkDevice&);
 	void createCommandPool(VkDevice&, VkPhysicalDevice&, VkSurfaceKHR&);
+	void createVertexBuffer(VkDevice&, VkPhysicalDevice&);
 	void createCommandBuffers(VkDevice&);
 	void createSemaphoresAndFences(VkDevice&);
+
+	void mapVertexDataToBuffer(VkDevice&, const std::vector<Vertex>&);
 
 	VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>&);
 	VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>);
@@ -74,6 +84,8 @@ private:
 
 	static std::vector<char> readFile(const std::string& filename);
 	VkShaderModule createShaderModule(const std::vector<char>& code, VkDevice*);
+
+	uint32_t findMemoryType(VkPhysicalDevice&, uint32_t, VkMemoryPropertyFlags);
 };
 
 #endif

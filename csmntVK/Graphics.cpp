@@ -26,6 +26,9 @@ csmntVkGraphics::~csmntVkGraphics()
 
 void csmntVkGraphics::shutdown(VkDevice& device)
 {
+	vkDestroyBuffer(device, m_vkVertexBuffer, nullptr);
+	vkFreeMemory(device, m_vkVertexBufferMemory, nullptr);
+
 	cleanupSwapChain(device);
 
 	for (size_t i = 0; i < m_MAX_FRAMES_IN_FLIGHT; i++) {
@@ -35,11 +38,21 @@ void csmntVkGraphics::shutdown(VkDevice& device)
 	}
 
 	vkDestroyCommandPool(device, m_vkCommandPool, nullptr);
+
+	//Cleanup Models
+	if (m_pModel)
+	{
+		delete m_pModel;
+		m_pModel = nullptr;
+	}
 }
 
 void csmntVkGraphics::initGraphicsModule(VkDevice& device, VkPhysicalDevice& physicalDevice, VkSurfaceKHR& surface, 
 										 SwapChainSupportDetails& scSupportDetails, GLFWwindow* window)
 {
+	//Create models
+	m_pModel = new Model();
+
 	//Create all required functionality for graphics pipeline
 	createSwapChain(device, physicalDevice, surface, scSupportDetails, window);
 	createImageViews(device);
@@ -49,6 +62,7 @@ void csmntVkGraphics::initGraphicsModule(VkDevice& device, VkPhysicalDevice& phy
 	createFramebuffers(device);
 
 	createCommandPool(device, physicalDevice, surface);
+	createVertexBuffer(device, physicalDevice);
 	createCommandBuffers(device);
 
 	createSemaphoresAndFences(device);
@@ -84,13 +98,16 @@ void csmntVkGraphics::createPipeline(VkDevice& device)
 	//Store Stages
 	VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
 
-	//Vertex Input
+	//Vertex Input - from Model Vertex format
+	auto bindingDescription = Vertex::getBindingDescription();
+	auto attributeDescriptions = Vertex::getAttributeDescriptions();
+
 	VkPipelineVertexInputStateCreateInfo vertexInputInfo = {};
 	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-	vertexInputInfo.vertexBindingDescriptionCount = 0;
-	vertexInputInfo.pVertexBindingDescriptions = nullptr; // Optional
-	vertexInputInfo.vertexAttributeDescriptionCount = 0;
-	vertexInputInfo.pVertexAttributeDescriptions = nullptr; // Optional
+	vertexInputInfo.vertexBindingDescriptionCount = 1;
+	vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
+	vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+	vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
 
 	VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
 	inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -339,6 +356,43 @@ void csmntVkGraphics::createCommandPool(VkDevice& device, VkPhysicalDevice& phys
 	}
 }
 
+void csmntVkGraphics::createVertexBuffer(VkDevice& device, VkPhysicalDevice& physicalDevice)
+{
+	//Vertices from models
+	const std::vector<Vertex> verts = m_pModel->getVertices();
+
+	VkBufferCreateInfo bufferInfo = {};
+	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	bufferInfo.size = sizeof(verts[0]) * verts.size();
+
+	bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+	if (vkCreateBuffer(device, &bufferInfo, nullptr, &m_vkVertexBuffer) != VK_SUCCESS) {
+		throw std::runtime_error("failed to create vertex buffer!");
+	}
+
+	//Allocate memory
+	VkMemoryRequirements memRequirements;
+	vkGetBufferMemoryRequirements(device, m_vkVertexBuffer, &memRequirements);
+
+	VkMemoryAllocateInfo allocInfo = {};
+	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	allocInfo.allocationSize = memRequirements.size;
+	allocInfo.memoryTypeIndex = findMemoryType(physicalDevice, 
+								memRequirements.memoryTypeBits, 
+								VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+	if (vkAllocateMemory(device, &allocInfo, nullptr, &m_vkVertexBufferMemory) != VK_SUCCESS) {
+		throw std::runtime_error("failed to allocate vertex buffer memory!");
+	}
+
+	vkBindBufferMemory(device, m_vkVertexBuffer, m_vkVertexBufferMemory, 0);
+
+	//TODO: Move this to optimal place
+	mapVertexDataToBuffer(device, verts);
+}
+
 void csmntVkGraphics::createCommandBuffers(VkDevice& device)
 {
 	m_vkCommandBuffers.resize(m_vkSwapChainFramebuffers.size());
@@ -387,7 +441,12 @@ void csmntVkGraphics::createCommandBuffers(VkDevice& device)
 
 		vkCmdBindPipeline(m_vkCommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_vkGraphicsPipeline);
 
-		vkCmdDraw(m_vkCommandBuffers[i], 3, 1, 0, 0);
+		//Drawing
+		VkBuffer vertexBuffers[] = { m_vkVertexBuffer };
+		VkDeviceSize offsets[] = { 0 };
+		vkCmdBindVertexBuffers(m_vkCommandBuffers[i], 0, 1, vertexBuffers, offsets);
+
+		vkCmdDraw(m_vkCommandBuffers[i], static_cast<uint32_t>(m_pModel->getVertices().size()), 1, 0, 0);
 
 		vkCmdEndRenderPass(m_vkCommandBuffers[i]);
 
@@ -419,6 +478,21 @@ void csmntVkGraphics::createSemaphoresAndFences(VkDevice& device)
 			throw std::runtime_error("failed to create synchronization objects (semaphore or fence) for a frame!");
 		}
 	}
+}
+
+void csmntVkGraphics::mapVertexDataToBuffer(VkDevice& device, const std::vector<Vertex>& vertData)
+{
+	void* data;
+
+	VkBufferCreateInfo bufferInfo = {};
+	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	bufferInfo.size = sizeof(vertData[0]) * vertData.size();
+	bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+	vkMapMemory(device, m_vkVertexBufferMemory, 0, bufferInfo.size, 0, &data);
+	memcpy(data, vertData.data(), (size_t)bufferInfo.size);
+	vkUnmapMemory(device, m_vkVertexBufferMemory);
 }
 
 void csmntVkGraphics::drawFrame(VkDevice& device, VkQueue& graphicsQueue, VkQueue& presentQueue,
@@ -686,6 +760,20 @@ VkShaderModule csmntVkGraphics::createShaderModule(const std::vector<char>& code
 	}
 
 	return shaderModule;
+}
+
+uint32_t csmntVkGraphics::findMemoryType(VkPhysicalDevice& physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties)
+{
+	VkPhysicalDeviceMemoryProperties memProperties;
+	vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
+
+	for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
+		if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
+			return i;
+		}
+	}
+
+	throw std::runtime_error("failed to find suitable memory type!");
 }
 
 VkSurfaceFormatKHR csmntVkGraphics::chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats)
