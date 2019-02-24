@@ -75,11 +75,12 @@ private:
 	void createRenderPass(VkDevice&);
 	void createFramebuffers(VkDevice&);
 	void createCommandPool(VkDevice&, VkPhysicalDevice&, VkSurfaceKHR&);
-	void createVertexBuffer(VkDevice&, VkPhysicalDevice&);
+	void createVertexBuffer(csmntVkApplication*);
 	void createCommandBuffers(VkDevice&);
 	void createSemaphoresAndFences(VkDevice&);
 
 	void createBuffer(VkDevice&, VkPhysicalDevice&, VkDeviceSize, VkBufferUsageFlags, VkMemoryPropertyFlags, VkBuffer&, VkDeviceMemory&);
+	void copyBuffer(csmntVkApplication*, VkBuffer, VkBuffer, VkDeviceSize);
 
 	VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>&);
 	VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>);

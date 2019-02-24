@@ -63,7 +63,7 @@ void csmntVkGraphics::initGraphicsModule(csmntVkApplication* pApp, SwapChainSupp
 	createFramebuffers(pApp->getVkDevice());
 
 	createCommandPool(pApp->getVkDevice(), pApp->getVkPhysicalDevice(), pApp->getVkSurfaceKHR());
-	createVertexBuffer(pApp->getVkDevice(), pApp->getVkPhysicalDevice());
+	createVertexBuffer(pApp);
 	createCommandBuffers(pApp->getVkDevice());
 
 	createSemaphoresAndFences(pApp->getVkDevice());
@@ -357,18 +357,28 @@ void csmntVkGraphics::createCommandPool(VkDevice& device, VkPhysicalDevice& phys
 	}
 }
 
-void csmntVkGraphics::createVertexBuffer(VkDevice& device, VkPhysicalDevice& physicalDevice)
+void csmntVkGraphics::createVertexBuffer(csmntVkApplication* pApp)
 {
 	//Vertices from models
 	const std::vector<Vertex> verts = m_pModel->getVertices();
 
 	VkDeviceSize bufferSize = sizeof(verts[0]) * verts.size();
-	createBuffer(device, physicalDevice, bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, m_vkVertexBuffer, m_vkVertexBufferMemory);
+	VkBuffer stagingBuffer;
+	VkDeviceMemory stagingBufferMemory;
+	createBuffer(pApp->getVkDevice(), pApp->getVkPhysicalDevice(), bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT 
+		| VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
 
 	void* data;
-	vkMapMemory(device, m_vkVertexBufferMemory, 0, bufferSize, 0, &data);
+	vkMapMemory(pApp->getVkDevice(), stagingBufferMemory, 0, bufferSize, 0, &data);
 	memcpy(data, verts.data(), (size_t)bufferSize);
-	vkUnmapMemory(device, m_vkVertexBufferMemory);
+	vkUnmapMemory(pApp->getVkDevice(), stagingBufferMemory);
+
+	createBuffer(pApp->getVkDevice(), pApp->getVkPhysicalDevice(), bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT
+		| VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_vkVertexBuffer, m_vkVertexBufferMemory);
+	copyBuffer(pApp, stagingBuffer, m_vkVertexBuffer, bufferSize);
+
+	vkDestroyBuffer(pApp->getVkDevice(), stagingBuffer, nullptr);
+	vkFreeMemory(pApp->getVkDevice(), stagingBufferMemory, nullptr);
 }
 
 void csmntVkGraphics::createCommandBuffers(VkDevice& device)
@@ -486,6 +496,42 @@ void csmntVkGraphics::createBuffer(VkDevice& device, VkPhysicalDevice& physicalD
 	}
 
 	vkBindBufferMemory(device, buffer, bufferMemory, 0);
+}
+
+void csmntVkGraphics::copyBuffer(csmntVkApplication* pApp, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
+{
+	VkCommandBufferAllocateInfo allocInfo = {};
+	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	allocInfo.commandPool = m_vkCommandPool;
+	allocInfo.commandBufferCount = 1;
+
+	VkCommandBuffer commandBuffer;
+	vkAllocateCommandBuffers(pApp->getVkDevice(), &allocInfo, &commandBuffer);
+
+	VkCommandBufferBeginInfo beginInfo = {};
+	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+	vkBeginCommandBuffer(commandBuffer, &beginInfo);
+
+	VkBufferCopy copyRegion = {};
+	copyRegion.srcOffset = 0; // Optional
+	copyRegion.dstOffset = 0; // Optional
+	copyRegion.size = size;
+	vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+
+	vkEndCommandBuffer(commandBuffer);
+
+	VkSubmitInfo submitInfo = {};
+	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submitInfo.commandBufferCount = 1;
+	submitInfo.pCommandBuffers = &commandBuffer;
+
+	vkQueueSubmit(pApp->getGraphicsQueue(), 1, &submitInfo, VK_NULL_HANDLE);
+	vkQueueWaitIdle(pApp->getGraphicsQueue());
+
+	vkFreeCommandBuffers(pApp->getVkDevice(), m_vkCommandPool, 1, &commandBuffer);
 }
 
 void csmntVkGraphics::drawFrame(csmntVkApplication* pApp, SwapChainSupportDetails& swapChainSupport)
