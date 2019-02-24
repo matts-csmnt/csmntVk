@@ -28,10 +28,14 @@ csmntVkGraphics::~csmntVkGraphics()
 
 void csmntVkGraphics::shutdown(VkDevice& device)
 {
+	cleanupSwapChain(device);
+
+	//buffers
+	vkDestroyBuffer(device, m_vkIndexBuffer, nullptr);
+	vkFreeMemory(device, m_vkIndexBufferMemory, nullptr);
+
 	vkDestroyBuffer(device, m_vkVertexBuffer, nullptr);
 	vkFreeMemory(device, m_vkVertexBufferMemory, nullptr);
-
-	cleanupSwapChain(device);
 
 	for (size_t i = 0; i < m_MAX_FRAMES_IN_FLIGHT; i++) {
 		vkDestroySemaphore(device, m_vkRenderFinishedSemaphores[i], nullptr);
@@ -63,7 +67,10 @@ void csmntVkGraphics::initGraphicsModule(csmntVkApplication* pApp, SwapChainSupp
 	createFramebuffers(pApp->getVkDevice());
 
 	createCommandPool(pApp->getVkDevice(), pApp->getVkPhysicalDevice(), pApp->getVkSurfaceKHR());
+	
 	createVertexBuffer(pApp);
+	createIndexBuffer(pApp);
+
 	createCommandBuffers(pApp->getVkDevice());
 
 	createSemaphoresAndFences(pApp->getVkDevice());
@@ -381,6 +388,33 @@ void csmntVkGraphics::createVertexBuffer(csmntVkApplication* pApp)
 	vkFreeMemory(pApp->getVkDevice(), stagingBufferMemory, nullptr);
 }
 
+void csmntVkGraphics::createIndexBuffer(csmntVkApplication* pApp)
+{
+	//indices from model
+	const std::vector<uint16_t> indices = m_pModel->getIndices();
+	m_vkIndexCount = indices.size();
+
+	VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
+
+	VkBuffer stagingBuffer;
+	VkDeviceMemory stagingBufferMemory;
+	createBuffer(pApp->getVkDevice(), pApp->getVkPhysicalDevice(), bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT 
+		| VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+
+	void* data;
+	vkMapMemory(pApp->getVkDevice(), stagingBufferMemory, 0, bufferSize, 0, &data);
+	memcpy(data, indices.data(), (size_t)bufferSize);
+	vkUnmapMemory(pApp->getVkDevice(), stagingBufferMemory);
+
+	createBuffer(pApp->getVkDevice(), pApp->getVkPhysicalDevice(), bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT
+		| VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_vkIndexBuffer, m_vkIndexBufferMemory);
+
+	copyBuffer(pApp, stagingBuffer, m_vkIndexBuffer, bufferSize);
+
+	vkDestroyBuffer(pApp->getVkDevice(), stagingBuffer, nullptr);
+	vkFreeMemory(pApp->getVkDevice(), stagingBufferMemory, nullptr);
+}
+
 void csmntVkGraphics::createCommandBuffers(VkDevice& device)
 {
 	m_vkCommandBuffers.resize(m_vkSwapChainFramebuffers.size());
@@ -429,12 +463,14 @@ void csmntVkGraphics::createCommandBuffers(VkDevice& device)
 
 		vkCmdBindPipeline(m_vkCommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_vkGraphicsPipeline);
 
-		//Drawing
+		//Drawing -- offsets for gathering multiple buffers and drawing
 		VkBuffer vertexBuffers[] = { m_vkVertexBuffer };
 		VkDeviceSize offsets[] = { 0 };
 		vkCmdBindVertexBuffers(m_vkCommandBuffers[i], 0, 1, vertexBuffers, offsets);
+		vkCmdBindIndexBuffer(m_vkCommandBuffers[i], m_vkIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
-		vkCmdDraw(m_vkCommandBuffers[i], static_cast<uint32_t>(m_pModel->getVertices().size()), 1, 0, 0);
+		//vkCmdDraw(m_vkCommandBuffers[i], static_cast<uint32_t>(m_pModel->getVertices().size()), 1, 0, 0);
+		vkCmdDrawIndexed(m_vkCommandBuffers[i], static_cast<uint32_t>(m_vkIndexCount), 1, 0, 0, 0);
 
 		vkCmdEndRenderPass(m_vkCommandBuffers[i]);
 

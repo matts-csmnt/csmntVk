@@ -61,6 +61,9 @@ private:
 
 	VkBuffer					m_vkVertexBuffer;
 	VkDeviceMemory				m_vkVertexBufferMemory;
+	VkBuffer					m_vkIndexBuffer;
+	VkDeviceMemory				m_vkIndexBufferMemory;
+	uint16_t					m_vkIndexCount;
 
 	//Models
 	Model*						m_pModel;
@@ -75,7 +78,10 @@ private:
 	void createRenderPass(VkDevice&);
 	void createFramebuffers(VkDevice&);
 	void createCommandPool(VkDevice&, VkPhysicalDevice&, VkSurfaceKHR&);
+	
 	void createVertexBuffer(csmntVkApplication*);
+	void createIndexBuffer(csmntVkApplication*);
+
 	void createCommandBuffers(VkDevice&);
 	void createSemaphoresAndFences(VkDevice&);
 
