@@ -144,6 +144,7 @@
     <ClInclude Include="defines.h" />
     <ClInclude Include="Graphics.h" />
     <ClInclude Include="Model.h" />
+    <ClInclude Include="uniformBuffer.h" />
     <ClInclude Include="vkDetailsStructs.h" />
   </ItemGroup>
   <ItemGroup>

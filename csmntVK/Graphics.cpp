@@ -12,6 +12,14 @@
 
 #include "Application.h"
 
+#define GLM_FORCE_RADIANS
+#include "../Libraries/glm/glm.hpp"
+#include "../Libraries/glm/gtc/matrix_transform.hpp"
+
+#include <chrono>
+
+#include "uniformBuffer.h"
+
 csmntVkGraphics::csmntVkGraphics()
 {
 #if _DEBUG
@@ -29,6 +37,15 @@ csmntVkGraphics::~csmntVkGraphics()
 void csmntVkGraphics::shutdown(VkDevice& device)
 {
 	cleanupSwapChain(device);
+
+	vkDestroyDescriptorPool(device, m_vkDescriptorPool, nullptr);
+
+	vkDestroyDescriptorSetLayout(device, m_vkDescriptorSetLayout, nullptr);
+
+	for (size_t i = 0; i < m_vkSwapChainImages.size(); i++) {
+		vkDestroyBuffer(device, m_uniformBuffers[i], nullptr);
+		vkFreeMemory(device, m_uniformBuffersMemory[i], nullptr);
+	}
 
 	//buffers
 	vkDestroyBuffer(device, m_vkIndexBuffer, nullptr);
@@ -63,17 +80,79 @@ void csmntVkGraphics::initGraphicsModule(csmntVkApplication* pApp, SwapChainSupp
 	createImageViews(pApp->getVkDevice());
 
 	createRenderPass(pApp->getVkDevice());
+
+	createDescriptorSetLayout(pApp->getVkDevice());
+
 	createPipeline(pApp->getVkDevice());
+
 	createFramebuffers(pApp->getVkDevice());
 
 	createCommandPool(pApp->getVkDevice(), pApp->getVkPhysicalDevice(), pApp->getVkSurfaceKHR());
 	
 	createVertexBuffer(pApp);
 	createIndexBuffer(pApp);
+	createUniformBuffers(pApp);
+
+	createDescriptorPool(pApp->getVkDevice());
+	createDescriptorSets(pApp->getVkDevice());
 
 	createCommandBuffers(pApp->getVkDevice());
 
 	createSemaphoresAndFences(pApp->getVkDevice());
+}
+
+void csmntVkGraphics::createDescriptorSetLayout(VkDevice& device) 
+{
+	VkDescriptorSetLayoutBinding uboLayoutBinding = {};
+	uboLayoutBinding.binding = 0;
+	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	uboLayoutBinding.descriptorCount = 1;
+	uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	uboLayoutBinding.pImmutableSamplers = nullptr; // Optional
+
+	VkDescriptorSetLayoutCreateInfo layoutInfo = {};
+	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	layoutInfo.bindingCount = 1;
+	layoutInfo.pBindings = &uboLayoutBinding;
+
+	if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &m_vkDescriptorSetLayout) != VK_SUCCESS) {
+		throw std::runtime_error("failed to create descriptor set layout!");
+	}
+}
+
+void csmntVkGraphics::createDescriptorSets(VkDevice& device)
+{
+	std::vector<VkDescriptorSetLayout> layouts(m_vkSwapChainImages.size(), m_vkDescriptorSetLayout);
+	VkDescriptorSetAllocateInfo allocInfo = {};
+	allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+	allocInfo.descriptorPool = m_vkDescriptorPool;
+	allocInfo.descriptorSetCount = static_cast<uint32_t>(m_vkSwapChainImages.size());
+	allocInfo.pSetLayouts = layouts.data();
+
+	m_vkDescriptorSets.resize(m_vkSwapChainImages.size());
+	if (vkAllocateDescriptorSets(device, &allocInfo, m_vkDescriptorSets.data()) != VK_SUCCESS) {
+		throw std::runtime_error("failed to allocate descriptor sets!");
+	}
+
+	for (size_t i = 0; i < m_vkSwapChainImages.size(); i++) {
+		VkDescriptorBufferInfo bufferInfo = {};
+		bufferInfo.buffer = m_uniformBuffers[i];
+		bufferInfo.offset = 0;
+		bufferInfo.range = sizeof(UniformBufferObject);
+
+		VkWriteDescriptorSet descriptorWrite = {};
+		descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		descriptorWrite.dstSet = m_vkDescriptorSets[i];
+		descriptorWrite.dstBinding = 0;
+		descriptorWrite.dstArrayElement = 0;
+		descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		descriptorWrite.descriptorCount = 1;
+		descriptorWrite.pBufferInfo = &bufferInfo;
+		descriptorWrite.pImageInfo = nullptr; // Optional
+		descriptorWrite.pTexelBufferView = nullptr; // Optional
+
+		vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
+	}
 }
 
 void csmntVkGraphics::createPipeline(VkDevice& device)
@@ -164,7 +243,7 @@ void csmntVkGraphics::createPipeline(VkDevice& device)
 	rasterizer.lineWidth = 1.0f;
 
 	rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-	rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+	rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 
 	rasterizer.depthBiasEnable = VK_FALSE;
 	rasterizer.depthBiasConstantFactor = 0.0f; // Optional
@@ -228,8 +307,8 @@ void csmntVkGraphics::createPipeline(VkDevice& device)
 	//Pipeline Layout
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
 	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	pipelineLayoutInfo.setLayoutCount = 0; // Optional
-	pipelineLayoutInfo.pSetLayouts = nullptr; // Optional
+	pipelineLayoutInfo.setLayoutCount = 1;
+	pipelineLayoutInfo.pSetLayouts = &m_vkDescriptorSetLayout;
 	pipelineLayoutInfo.pushConstantRangeCount = 0; // Optional
 	pipelineLayoutInfo.pPushConstantRanges = nullptr; // Optional
 
@@ -415,6 +494,19 @@ void csmntVkGraphics::createIndexBuffer(csmntVkApplication* pApp)
 	vkFreeMemory(pApp->getVkDevice(), stagingBufferMemory, nullptr);
 }
 
+void csmntVkGraphics::createUniformBuffers(csmntVkApplication* pApp) {
+	VkDeviceSize bufferSize = sizeof(UniformBufferObject);
+
+	m_uniformBuffers.resize(m_vkSwapChainImages.size());
+	m_uniformBuffersMemory.resize(m_vkSwapChainImages.size());
+
+	for (size_t i = 0; i < m_vkSwapChainImages.size(); i++) {
+		createBuffer(pApp->getVkDevice(), pApp->getVkPhysicalDevice(), bufferSize, 
+			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 
+			m_uniformBuffers[i], m_uniformBuffersMemory[i]);
+	}
+}
+
 void csmntVkGraphics::createCommandBuffers(VkDevice& device)
 {
 	m_vkCommandBuffers.resize(m_vkSwapChainFramebuffers.size());
@@ -468,6 +560,9 @@ void csmntVkGraphics::createCommandBuffers(VkDevice& device)
 		VkDeviceSize offsets[] = { 0 };
 		vkCmdBindVertexBuffers(m_vkCommandBuffers[i], 0, 1, vertexBuffers, offsets);
 		vkCmdBindIndexBuffer(m_vkCommandBuffers[i], m_vkIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
+
+		vkCmdBindDescriptorSets(m_vkCommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_vkPipelineLayout,
+			0, 1, &m_vkDescriptorSets[i], 0, nullptr);
 
 		//vkCmdDraw(m_vkCommandBuffers[i], static_cast<uint32_t>(m_pModel->getVertices().size()), 1, 0, 0);
 		vkCmdDrawIndexed(m_vkCommandBuffers[i], static_cast<uint32_t>(m_vkIndexCount), 1, 0, 0, 0);
@@ -580,6 +675,8 @@ void csmntVkGraphics::drawFrame(csmntVkApplication* pApp, SwapChainSupportDetail
 	uint32_t imageIndex;
 	result = vkAcquireNextImageKHR(pApp->getVkDevice(), m_vkSwapChain, std::numeric_limits<uint64_t>::max(), m_vkImageAvailableSemaphores[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
 
+	updateUniformBuffer(imageIndex, pApp->getVkDevice());
+
 	//check if swapchain needs recreation
 	if (result == VK_ERROR_OUT_OF_DATE_KHR) {
 		pApp->setIsFrameBufferResized(false);
@@ -590,6 +687,8 @@ void csmntVkGraphics::drawFrame(csmntVkApplication* pApp, SwapChainSupportDetail
 	else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
 		throw std::runtime_error("failed to acquire swap chain image!");
 	}
+
+	//updateUniformBuffer(imageIndex, pApp->getVkDevice());
 
 	VkSubmitInfo submitInfo = {};
 	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -646,6 +745,43 @@ void csmntVkGraphics::drawFrame(csmntVkApplication* pApp, SwapChainSupportDetail
 
 	//Advance frame
 	m_currentFrame = (m_currentFrame + 1) % m_MAX_FRAMES_IN_FLIGHT;
+}
+
+void csmntVkGraphics::updateUniformBuffer(uint32_t currentImage, VkDevice& device)
+{
+	static auto startTime = std::chrono::high_resolution_clock::now();
+
+	auto currentTime = std::chrono::high_resolution_clock::now();
+	float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+
+	UniformBufferObject ubo = {};
+	ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+	ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+	ubo.proj = glm::perspective(glm::radians(45.0f), m_vkSwapChainExtent.width / (float)m_vkSwapChainExtent.height, 0.1f, 10.0f);
+	ubo.proj[1][1] *= -1;
+
+	void* data;
+	vkMapMemory(device, m_uniformBuffersMemory[currentImage], 0, sizeof(ubo), 0, &data);
+	memcpy(data, &ubo, sizeof(ubo));
+	vkUnmapMemory(device, m_uniformBuffersMemory[currentImage]);
+}
+
+void csmntVkGraphics::createDescriptorPool(VkDevice& device)
+{
+	VkDescriptorPoolSize poolSize = {};
+	poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	poolSize.descriptorCount = static_cast<uint32_t>(m_vkSwapChainImages.size());
+
+	VkDescriptorPoolCreateInfo poolInfo = {};
+	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+	poolInfo.poolSizeCount = 1;
+	poolInfo.pPoolSizes = &poolSize;
+
+	poolInfo.maxSets = static_cast<uint32_t>(m_vkSwapChainImages.size());;
+
+	if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &m_vkDescriptorPool) != VK_SUCCESS) {
+		throw std::runtime_error("failed to create descriptor pool!");
+	}
 }
 
 void csmntVkGraphics::recreateSwapChain(csmntVkApplication* pApp, SwapChainSupportDetails& swapChainSupport)

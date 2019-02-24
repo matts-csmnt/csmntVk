@@ -48,6 +48,7 @@ private:
 	VkExtent2D					m_vkSwapChainExtent;
 	std::vector<VkImageView>    m_vkSwapChainImageViews;
 
+	VkDescriptorSetLayout		m_vkDescriptorSetLayout;
 	VkPipelineLayout			m_vkPipelineLayout;
 	VkRenderPass				m_vkRenderPass;
 	VkPipeline					m_vkGraphicsPipeline;
@@ -65,6 +66,12 @@ private:
 	VkDeviceMemory				m_vkIndexBufferMemory;
 	uint16_t					m_vkIndexCount;
 
+	std::vector<VkBuffer>		m_uniformBuffers;
+	std::vector<VkDeviceMemory> m_uniformBuffersMemory;
+
+	VkDescriptorPool			m_vkDescriptorPool;
+	std::vector<VkDescriptorSet> m_vkDescriptorSets;
+
 	//Models
 	Model*						m_pModel;
 
@@ -74,6 +81,8 @@ private:
 
 	void cleanupSwapChain(VkDevice&);
 
+	void createDescriptorSetLayout(VkDevice&);
+
 	void createPipeline(VkDevice&);
 	void createRenderPass(VkDevice&);
 	void createFramebuffers(VkDevice&);
@@ -81,6 +90,11 @@ private:
 	
 	void createVertexBuffer(csmntVkApplication*);
 	void createIndexBuffer(csmntVkApplication*);
+	void createUniformBuffers(csmntVkApplication*);
+	void updateUniformBuffer(uint32_t, VkDevice&);
+
+	void createDescriptorPool(VkDevice&);
+	void createDescriptorSets(VkDevice&);
 
 	void createCommandBuffers(VkDevice&);
 	void createSemaphoresAndFences(VkDevice&);
