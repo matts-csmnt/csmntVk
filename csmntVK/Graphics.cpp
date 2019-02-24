@@ -10,6 +10,8 @@
 #include "vkDetailsStructs.h"
 #endif
 
+#include "Application.h"
+
 csmntVkGraphics::csmntVkGraphics()
 {
 #if _DEBUG
@@ -47,25 +49,24 @@ void csmntVkGraphics::shutdown(VkDevice& device)
 	}
 }
 
-void csmntVkGraphics::initGraphicsModule(VkDevice& device, VkPhysicalDevice& physicalDevice, VkSurfaceKHR& surface, 
-										 SwapChainSupportDetails& scSupportDetails, GLFWwindow* window)
+void csmntVkGraphics::initGraphicsModule(csmntVkApplication* pApp, SwapChainSupportDetails& swapChainSupport)
 {
 	//Create models
 	m_pModel = new Model();
 
 	//Create all required functionality for graphics pipeline
-	createSwapChain(device, physicalDevice, surface, scSupportDetails, window);
-	createImageViews(device);
+	createSwapChain(pApp, swapChainSupport);
+	createImageViews(pApp->getVkDevice());
 
-	createRenderPass(device);
-	createPipeline(device);
-	createFramebuffers(device);
+	createRenderPass(pApp->getVkDevice());
+	createPipeline(pApp->getVkDevice());
+	createFramebuffers(pApp->getVkDevice());
 
-	createCommandPool(device, physicalDevice, surface);
-	createVertexBuffer(device, physicalDevice);
-	createCommandBuffers(device);
+	createCommandPool(pApp->getVkDevice(), pApp->getVkPhysicalDevice(), pApp->getVkSurfaceKHR());
+	createVertexBuffer(pApp->getVkDevice(), pApp->getVkPhysicalDevice());
+	createCommandBuffers(pApp->getVkDevice());
 
-	createSemaphoresAndFences(device);
+	createSemaphoresAndFences(pApp->getVkDevice());
 }
 
 void csmntVkGraphics::createPipeline(VkDevice& device)
@@ -361,36 +362,13 @@ void csmntVkGraphics::createVertexBuffer(VkDevice& device, VkPhysicalDevice& phy
 	//Vertices from models
 	const std::vector<Vertex> verts = m_pModel->getVertices();
 
-	VkBufferCreateInfo bufferInfo = {};
-	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	bufferInfo.size = sizeof(verts[0]) * verts.size();
+	VkDeviceSize bufferSize = sizeof(verts[0]) * verts.size();
+	createBuffer(device, physicalDevice, bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, m_vkVertexBuffer, m_vkVertexBufferMemory);
 
-	bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-	if (vkCreateBuffer(device, &bufferInfo, nullptr, &m_vkVertexBuffer) != VK_SUCCESS) {
-		throw std::runtime_error("failed to create vertex buffer!");
-	}
-
-	//Allocate memory
-	VkMemoryRequirements memRequirements;
-	vkGetBufferMemoryRequirements(device, m_vkVertexBuffer, &memRequirements);
-
-	VkMemoryAllocateInfo allocInfo = {};
-	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-	allocInfo.allocationSize = memRequirements.size;
-	allocInfo.memoryTypeIndex = findMemoryType(physicalDevice, 
-								memRequirements.memoryTypeBits, 
-								VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-
-	if (vkAllocateMemory(device, &allocInfo, nullptr, &m_vkVertexBufferMemory) != VK_SUCCESS) {
-		throw std::runtime_error("failed to allocate vertex buffer memory!");
-	}
-
-	vkBindBufferMemory(device, m_vkVertexBuffer, m_vkVertexBufferMemory, 0);
-
-	//TODO: Move this to optimal place
-	mapVertexDataToBuffer(device, verts);
+	void* data;
+	vkMapMemory(device, m_vkVertexBufferMemory, 0, bufferSize, 0, &data);
+	memcpy(data, verts.data(), (size_t)bufferSize);
+	vkUnmapMemory(device, m_vkVertexBufferMemory);
 }
 
 void csmntVkGraphics::createCommandBuffers(VkDevice& device)
@@ -480,39 +458,51 @@ void csmntVkGraphics::createSemaphoresAndFences(VkDevice& device)
 	}
 }
 
-void csmntVkGraphics::mapVertexDataToBuffer(VkDevice& device, const std::vector<Vertex>& vertData)
+void csmntVkGraphics::createBuffer(VkDevice& device, VkPhysicalDevice& physicalDevice, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory)
 {
-	void* data;
-
 	VkBufferCreateInfo bufferInfo = {};
 	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	bufferInfo.size = sizeof(vertData[0]) * vertData.size();
-	bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+	bufferInfo.size = size;
+	bufferInfo.usage = usage;
 	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-	vkMapMemory(device, m_vkVertexBufferMemory, 0, bufferInfo.size, 0, &data);
-	memcpy(data, vertData.data(), (size_t)bufferInfo.size);
-	vkUnmapMemory(device, m_vkVertexBufferMemory);
+	if (vkCreateBuffer(device, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
+		throw std::runtime_error("failed to create vertex buffer!");
+	}
+
+	//Allocate memory
+	VkMemoryRequirements memRequirements;
+	vkGetBufferMemoryRequirements(device, buffer, &memRequirements);
+
+	VkMemoryAllocateInfo allocInfo = {};
+	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	allocInfo.allocationSize = memRequirements.size;
+	allocInfo.memoryTypeIndex = findMemoryType(physicalDevice,
+		memRequirements.memoryTypeBits,
+		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+	if (vkAllocateMemory(device, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS) {
+		throw std::runtime_error("failed to allocate vertex buffer memory!");
+	}
+
+	vkBindBufferMemory(device, buffer, bufferMemory, 0);
 }
 
-void csmntVkGraphics::drawFrame(VkDevice& device, VkQueue& graphicsQueue, VkQueue& presentQueue,
-								VkPhysicalDevice& physicalDevice, VkSurfaceKHR& surface,
-								SwapChainSupportDetails& swapChainSupport, GLFWwindow* window,
-								bool& isFramebufferResized)
+void csmntVkGraphics::drawFrame(csmntVkApplication* pApp, SwapChainSupportDetails& swapChainSupport)
 {
 	VkResult result;
 
 	//Wait for frame to finish before continuing with another
-	vkWaitForFences(device, 1, &m_vkInFlightFences[m_currentFrame], VK_TRUE, std::numeric_limits<uint64_t>::max());
+	vkWaitForFences(pApp->getVkDevice(), 1, &m_vkInFlightFences[m_currentFrame], VK_TRUE, std::numeric_limits<uint64_t>::max());
 
 	uint32_t imageIndex;
-	result = vkAcquireNextImageKHR(device, m_vkSwapChain, std::numeric_limits<uint64_t>::max(), m_vkImageAvailableSemaphores[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
+	result = vkAcquireNextImageKHR(pApp->getVkDevice(), m_vkSwapChain, std::numeric_limits<uint64_t>::max(), m_vkImageAvailableSemaphores[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
 
 	//check if swapchain needs recreation
 	if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-		isFramebufferResized = false;
+		pApp->setIsFrameBufferResized(false);
 
-		recreateSwapChain(device,physicalDevice,surface,swapChainSupport,window);
+		recreateSwapChain(pApp, swapChainSupport);
 		return;
 	}
 	else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
@@ -537,10 +527,10 @@ void csmntVkGraphics::drawFrame(VkDevice& device, VkQueue& graphicsQueue, VkQueu
 	submitInfo.pSignalSemaphores = signalSemaphores;
 
 	//Reset the fences after we check for swapchain recreation etc...
-	vkResetFences(device, 1, &m_vkInFlightFences[m_currentFrame]);
+	vkResetFences(pApp->getVkDevice(), 1, &m_vkInFlightFences[m_currentFrame]);
 
 	//submit queue and signal fence
-	if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, m_vkInFlightFences[m_currentFrame]) != VK_SUCCESS) {
+	if (vkQueueSubmit(pApp->getGraphicsQueue(), 1, &submitInfo, m_vkInFlightFences[m_currentFrame]) != VK_SUCCESS) {
 		throw std::runtime_error("failed to submit draw command buffer!");
 	}
 
@@ -561,12 +551,12 @@ void csmntVkGraphics::drawFrame(VkDevice& device, VkQueue& graphicsQueue, VkQueu
 	//(https://vulkan-tutorial.com/Drawing_a_triangle/Drawing/Rendering_and_presentation)
 	presentInfo.pResults = nullptr; // Optional
 
-	result = vkQueuePresentKHR(presentQueue, &presentInfo);
+	result = vkQueuePresentKHR(pApp->getPresentQueue(), &presentInfo);
 
 	//check swapchain again
-	if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || isFramebufferResized) {
-		isFramebufferResized = false;
-		recreateSwapChain(device, physicalDevice, surface, swapChainSupport, window);
+	if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || pApp->getIsFrameBufferResized()) {
+		pApp->setIsFrameBufferResized(false);
+		recreateSwapChain(pApp, swapChainSupport);
 	}
 	else if (result != VK_SUCCESS) {
 		throw std::runtime_error("failed to present swap chain image!");
@@ -576,28 +566,27 @@ void csmntVkGraphics::drawFrame(VkDevice& device, VkQueue& graphicsQueue, VkQueu
 	m_currentFrame = (m_currentFrame + 1) % m_MAX_FRAMES_IN_FLIGHT;
 }
 
-void csmntVkGraphics::recreateSwapChain(VkDevice& device, VkPhysicalDevice& physicalDevice, VkSurfaceKHR& surface,
-										SwapChainSupportDetails& swapChainSupport, GLFWwindow* window)
+void csmntVkGraphics::recreateSwapChain(csmntVkApplication* pApp, SwapChainSupportDetails& swapChainSupport)
 {
 	//Check for minimized window state
 	int width = 0, height = 0;
 	while (width == 0 || height == 0) {
-		glfwGetFramebufferSize(window, &width, &height);
+		glfwGetFramebufferSize(pApp->getWindow(), &width, &height);
 		glfwWaitEvents();
 	}
 
 	//Recreate the swap chain if window surface changes to non compatible
-	vkDeviceWaitIdle(device);
+	vkDeviceWaitIdle(pApp->getVkDevice());
 
 	//cleanup
-	cleanupSwapChain(device);
+	cleanupSwapChain(pApp->getVkDevice());
 
-	createSwapChain(device, physicalDevice, surface, swapChainSupport, window);
-	createImageViews(device);
-	createRenderPass(device);
-	createPipeline(device);
-	createFramebuffers(device);
-	createCommandBuffers(device);
+	createSwapChain(pApp, swapChainSupport);
+	createImageViews(pApp->getVkDevice());
+	createRenderPass(pApp->getVkDevice());
+	createPipeline(pApp->getVkDevice());
+	createFramebuffers(pApp->getVkDevice());
+	createCommandBuffers(pApp->getVkDevice());
 
 #if _DEBUG
 	static size_t creations = 0;
@@ -606,12 +595,11 @@ void csmntVkGraphics::recreateSwapChain(VkDevice& device, VkPhysicalDevice& phys
 #endif
 }
 
-void csmntVkGraphics::createSwapChain(VkDevice& device, VkPhysicalDevice& physicalDevice, VkSurfaceKHR& surface, 
-									  SwapChainSupportDetails& swapChainSupport, GLFWwindow* window)
+void csmntVkGraphics::createSwapChain(csmntVkApplication* pApp, SwapChainSupportDetails& swapChainSupport)
 {
 	VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
 	VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
-	VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities, window);
+	VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities, pApp->getWindow());
 
 	//Images in the swap chain -- try settle for min + 1, else just go for max
 	uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
@@ -622,7 +610,7 @@ void csmntVkGraphics::createSwapChain(VkDevice& device, VkPhysicalDevice& physic
 	//Begin creating the swap chain
 	VkSwapchainCreateInfoKHR createInfo = {};
 	createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-	createInfo.surface = surface;
+	createInfo.surface = pApp->getVkSurfaceKHR();
 	createInfo.minImageCount = imageCount;
 	createInfo.imageFormat = surfaceFormat.format;
 	createInfo.imageColorSpace = surfaceFormat.colorSpace;
@@ -634,7 +622,7 @@ void csmntVkGraphics::createSwapChain(VkDevice& device, VkPhysicalDevice& physic
 	createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
 	//Decide if images are exclusive to queue families or concurrent
-	QueueFamilyIndices indices = findQueueFamilies(physicalDevice, surface);
+	QueueFamilyIndices indices = findQueueFamilies(pApp->getVkPhysicalDevice(), pApp->getVkSurfaceKHR());
 	uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.presentFamily.value() };
 
 	if (indices.graphicsFamily != indices.presentFamily) {
@@ -663,14 +651,14 @@ void csmntVkGraphics::createSwapChain(VkDevice& device, VkPhysicalDevice& physic
 	//here's where you have to reference the dead one
 	createInfo.oldSwapchain = VK_NULL_HANDLE;
 
-	if (vkCreateSwapchainKHR(device, &createInfo, nullptr, &m_vkSwapChain) != VK_SUCCESS) {
+	if (vkCreateSwapchainKHR(pApp->getVkDevice(), &createInfo, nullptr, &m_vkSwapChain) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create swap chain!");
 	}
 
 	//get handles to images created
-	vkGetSwapchainImagesKHR(device, m_vkSwapChain, &imageCount, nullptr);
+	vkGetSwapchainImagesKHR(pApp->getVkDevice(), m_vkSwapChain, &imageCount, nullptr);
 	m_vkSwapChainImages.resize(imageCount);
-	vkGetSwapchainImagesKHR(device, m_vkSwapChain, &imageCount, m_vkSwapChainImages.data());
+	vkGetSwapchainImagesKHR(pApp->getVkDevice(), m_vkSwapChain, &imageCount, m_vkSwapChainImages.data());
 
 	//Store sfc format and extent
 	m_vkSwapChainImageFormat = surfaceFormat.format;

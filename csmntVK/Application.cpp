@@ -51,8 +51,7 @@ void csmntVkApplication::mainLoop()
 
 		//Render Frame
 		SwapChainSupportDetails swapChainSupport = querySwapChainSupport(m_vkPhysicalDevice);
-		m_pGraphics->drawFrame(m_vkDevice, m_vkGraphicsQueue, m_vkPresentQueue, m_vkPhysicalDevice, 
-								m_vkSurface, swapChainSupport, m_pWindow, m_frameBufferResized);
+		m_pGraphics->drawFrame(this, swapChainSupport);
 
 		//all of the operations in drawFrame are asynchronous. That means that when we exit the 
 		//loop in mainLoop, drawing and presentation operations may still be going on. Cleaning 
@@ -74,7 +73,7 @@ void csmntVkApplication::initGraphicsModule()
 
 	SwapChainSupportDetails swapChainSupport = querySwapChainSupport(m_vkPhysicalDevice);
 
-	m_pGraphics->initGraphicsModule(m_vkDevice, m_vkPhysicalDevice, m_vkSurface, swapChainSupport, m_pWindow);
+	m_pGraphics->initGraphicsModule(this, swapChainSupport);
 }
 
 void csmntVkApplication::shutdown()

@@ -9,6 +9,9 @@
 #include "vkDetailsStructs.h"
 #include "Model.h"
 
+//Graphics knows about Application, for passing params easier
+class csmntVkApplication;
+
 /////////////////////////////////////////////////////
 //---csmntVkGraphics:
 //---Handles Graphics Pipeline (Shaders...)
@@ -23,15 +26,16 @@ public:
 
 	void shutdown(VkDevice&);
 
-	void initGraphicsModule(VkDevice&,VkPhysicalDevice&, VkSurfaceKHR&,
-							SwapChainSupportDetails&, GLFWwindow*);
-	
-	void drawFrame(VkDevice&, VkQueue&, VkQueue&, VkPhysicalDevice&, 
-							VkSurfaceKHR&, SwapChainSupportDetails&, 
-							GLFWwindow*, bool&);
+	/*void initGraphicsModule(VkDevice&,VkPhysicalDevice&, VkSurfaceKHR&,
+							SwapChainSupportDetails&, GLFWwindow*);*/
+	void initGraphicsModule(csmntVkApplication*, SwapChainSupportDetails&);
 
-	void recreateSwapChain(VkDevice&, VkPhysicalDevice&, VkSurfaceKHR&,
-							SwapChainSupportDetails&, GLFWwindow*);
+	/*void drawFrame(VkDevice&, VkQueue&, VkQueue&, VkPhysicalDevice&, 
+							VkSurfaceKHR&, SwapChainSupportDetails&, 
+							GLFWwindow*, bool&);*/
+	void drawFrame(csmntVkApplication*, SwapChainSupportDetails&);
+
+	void recreateSwapChain(csmntVkApplication*, SwapChainSupportDetails&);
 
 private:
 	//How many frames should be processed concurrently?
@@ -61,8 +65,7 @@ private:
 	//Models
 	Model*						m_pModel;
 
-	void createSwapChain(VkDevice&, VkPhysicalDevice&, VkSurfaceKHR&, 
-								SwapChainSupportDetails&, GLFWwindow*);
+	void createSwapChain(csmntVkApplication*, SwapChainSupportDetails&);
 
 	void createImageViews(VkDevice&);
 
@@ -76,7 +79,7 @@ private:
 	void createCommandBuffers(VkDevice&);
 	void createSemaphoresAndFences(VkDevice&);
 
-	void mapVertexDataToBuffer(VkDevice&, const std::vector<Vertex>&);
+	void createBuffer(VkDevice&, VkPhysicalDevice&, VkDeviceSize, VkBufferUsageFlags, VkMemoryPropertyFlags, VkBuffer&, VkDeviceMemory&);
 
 	VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>&);
 	VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>);

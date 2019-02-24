@@ -48,6 +48,20 @@ public:
 	void mainLoop();
 	void shutdown();
 
+	GLFWwindow*					getWindow() { return m_pWindow; };
+	VkInstance&					getVkInstance() { return m_vkInstance; };
+	VkDebugUtilsMessengerEXT&	getVkDebugMessenger() { return m_debugMessenger; };
+	VkPhysicalDevice&			getVkPhysicalDevice() { return m_vkPhysicalDevice; };
+	VkDevice&					getVkDevice() { return m_vkDevice; };
+	VkQueue&					getGraphicsQueue() { return m_vkGraphicsQueue; };
+	VkQueue&					getPresentQueue() { return m_vkPresentQueue; };
+	VkSurfaceKHR&				getVkSurfaceKHR() { return m_vkSurface; };
+	
+	const int getWindowHeight() const { return m_winH; };
+	const int getWindowWidth() const { return m_winW;};
+	const bool getIsFrameBufferResized() const { return m_frameBufferResized; };
+	void setIsFrameBufferResized(bool b) {m_frameBufferResized = b; };
+
 private:
 	void initVulkan();
 	void initWindow();
