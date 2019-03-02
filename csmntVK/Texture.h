@@ -13,6 +13,10 @@ public:
 	void createTextureImage(csmntVkApplication*, VkCommandPool&, const char*, const int);
 	void createTextureImageView(VkDevice&);
 
+	const VkImage& getVkImage() const { return m_textureImage; };
+	const VkDeviceMemory& getVkImageMem() const { return m_textureImageMemory; };
+	const VkImageView& getVkImageView() const { return m_textureImageView; };
+
 private:
 	VkImage			m_textureImage;
 	VkDeviceMemory	m_textureImageMemory;

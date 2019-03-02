@@ -9,6 +9,7 @@
 Texture::Texture(csmntVkApplication* pApp, VkCommandPool& cmdPool, const char* path, const int mode = STBI_rgb_alpha)
 {
 	createTextureImage(pApp, cmdPool, path, mode);
+	createTextureImageView(pApp->getVkDevice());
 }
 
 void Texture::createTextureImage(csmntVkApplication* pApp, VkCommandPool& cmdPool, const char* path, const int mode = STBI_rgb_alpha)
