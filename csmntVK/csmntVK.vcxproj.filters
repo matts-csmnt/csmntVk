@@ -33,7 +33,7 @@
     <ClCompile Include="Texture.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="vkBuffers.cpp">
+    <ClCompile Include="vkHelpers.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -56,7 +56,7 @@
     <ClInclude Include="Texture.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="vkBuffers.h">
+    <ClInclude Include="vkHelpers.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

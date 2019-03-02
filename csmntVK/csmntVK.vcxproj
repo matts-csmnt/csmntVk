@@ -140,7 +140,7 @@
     <ClCompile Include="main_entry.cpp" />
     <ClCompile Include="Application.h" />
     <ClCompile Include="Texture.cpp" />
-    <ClCompile Include="vkBuffers.cpp" />
+    <ClCompile Include="vkHelpers.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="defines.h" />
@@ -148,7 +148,7 @@
     <ClInclude Include="Model.h" />
     <ClInclude Include="Texture.h" />
     <ClInclude Include="uniformBuffer.h" />
-    <ClInclude Include="vkBuffers.h" />
+    <ClInclude Include="vkHelpers.h" />
     <ClInclude Include="vkDetailsStructs.h" />
   </ItemGroup>
   <ItemGroup>

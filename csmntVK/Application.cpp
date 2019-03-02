@@ -80,7 +80,7 @@ void csmntVkApplication::shutdown()
 {
 	if (m_pGraphics)
 	{
-		m_pGraphics->shutdown(m_vkDevice);
+		m_pGraphics->shutdown(this);
 		delete m_pGraphics;
 		m_pGraphics = nullptr;
 	}

@@ -1,16 +1,18 @@
 #pragma once
-
-#define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h>
+#include <vulkan/vulkan.h>
 
 class csmntVkApplication;
 
 class Texture {
 public:
 	Texture() {};
-	Texture(csmntVkApplication*, const char*, const int);
+	Texture(csmntVkApplication*, VkCommandPool&, const char*, const int);
 	~Texture() {};
 
+	void cleanupTexture(csmntVkApplication*);
+	void createTextureImage(csmntVkApplication*, VkCommandPool&, const char*, const int);
+
 private:
-	void createTextureImage(csmntVkApplication*, const char*, const int);
+	VkImage			m_textureImage;
+	VkDeviceMemory	m_textureImageMemory;
 };

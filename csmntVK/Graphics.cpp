@@ -11,7 +11,7 @@
 #endif
 
 #include "Application.h"
-#include "vkBuffers.h"
+#include "vkHelpers.h"
 
 #define GLM_FORCE_RADIANS
 #include "../Libraries/glm/glm.hpp"
@@ -35,33 +35,33 @@ csmntVkGraphics::~csmntVkGraphics()
 #endif
 }
 
-void csmntVkGraphics::shutdown(VkDevice& device)
+void csmntVkGraphics::shutdown(csmntVkApplication* pApp)
 {
-	cleanupSwapChain(device);
+	cleanupSwapChain(pApp->getVkDevice());
 
-	vkDestroyDescriptorPool(device, m_vkDescriptorPool, nullptr);
+	vkDestroyDescriptorPool(pApp->getVkDevice(), m_vkDescriptorPool, nullptr);
 
-	vkDestroyDescriptorSetLayout(device, m_vkDescriptorSetLayout, nullptr);
+	vkDestroyDescriptorSetLayout(pApp->getVkDevice(), m_vkDescriptorSetLayout, nullptr);
 
 	for (size_t i = 0; i < m_vkSwapChainImages.size(); i++) {
-		vkDestroyBuffer(device, m_uniformBuffers[i], nullptr);
-		vkFreeMemory(device, m_uniformBuffersMemory[i], nullptr);
+		vkDestroyBuffer(pApp->getVkDevice(), m_uniformBuffers[i], nullptr);
+		vkFreeMemory(pApp->getVkDevice(), m_uniformBuffersMemory[i], nullptr);
 	}
 
 	//buffers
-	vkDestroyBuffer(device, m_vkIndexBuffer, nullptr);
-	vkFreeMemory(device, m_vkIndexBufferMemory, nullptr);
+	vkDestroyBuffer(pApp->getVkDevice(), m_vkIndexBuffer, nullptr);
+	vkFreeMemory(pApp->getVkDevice(), m_vkIndexBufferMemory, nullptr);
 
-	vkDestroyBuffer(device, m_vkVertexBuffer, nullptr);
-	vkFreeMemory(device, m_vkVertexBufferMemory, nullptr);
+	vkDestroyBuffer(pApp->getVkDevice(), m_vkVertexBuffer, nullptr);
+	vkFreeMemory(pApp->getVkDevice(), m_vkVertexBufferMemory, nullptr);
 
 	for (size_t i = 0; i < m_MAX_FRAMES_IN_FLIGHT; i++) {
-		vkDestroySemaphore(device, m_vkRenderFinishedSemaphores[i], nullptr);
-		vkDestroySemaphore(device, m_vkImageAvailableSemaphores[i], nullptr);
-		vkDestroyFence(device, m_vkInFlightFences[i], nullptr);
+		vkDestroySemaphore(pApp->getVkDevice(), m_vkRenderFinishedSemaphores[i], nullptr);
+		vkDestroySemaphore(pApp->getVkDevice(), m_vkImageAvailableSemaphores[i], nullptr);
+		vkDestroyFence(pApp->getVkDevice(), m_vkInFlightFences[i], nullptr);
 	}
 
-	vkDestroyCommandPool(device, m_vkCommandPool, nullptr);
+	vkDestroyCommandPool(pApp->getVkDevice(), m_vkCommandPool, nullptr);
 
 	//Cleanup Models
 	if (m_pModel)
@@ -69,6 +69,8 @@ void csmntVkGraphics::shutdown(VkDevice& device)
 		delete m_pModel;
 		m_pModel = nullptr;
 	}
+
+	cleanupTexture(pApp);
 }
 
 void csmntVkGraphics::initGraphicsModule(csmntVkApplication* pApp, SwapChainSupportDetails& swapChainSupport)
@@ -100,6 +102,8 @@ void csmntVkGraphics::initGraphicsModule(csmntVkApplication* pApp, SwapChainSupp
 	createCommandBuffers(pApp->getVkDevice());
 
 	createSemaphoresAndFences(pApp->getVkDevice());
+
+	createTexture(pApp);
 }
 
 void csmntVkGraphics::createDescriptorSetLayout(VkDevice& device) 
@@ -452,7 +456,7 @@ void csmntVkGraphics::createVertexBuffer(csmntVkApplication* pApp)
 	VkDeviceSize bufferSize = sizeof(verts[0]) * verts.size();
 	VkBuffer stagingBuffer;
 	VkDeviceMemory stagingBufferMemory;
-	vkBuffers::createVkBuffer(pApp->getVkDevice(), pApp->getVkPhysicalDevice(), bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT 
+	vkHelpers::createVkBuffer(pApp->getVkDevice(), pApp->getVkPhysicalDevice(), bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT 
 		| VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
 
 	void* data;
@@ -460,9 +464,9 @@ void csmntVkGraphics::createVertexBuffer(csmntVkApplication* pApp)
 	memcpy(data, verts.data(), (size_t)bufferSize);
 	vkUnmapMemory(pApp->getVkDevice(), stagingBufferMemory);
 
-	vkBuffers::createVkBuffer(pApp->getVkDevice(), pApp->getVkPhysicalDevice(), bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT
+	vkHelpers::createVkBuffer(pApp->getVkDevice(), pApp->getVkPhysicalDevice(), bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT
 		| VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_vkVertexBuffer, m_vkVertexBufferMemory);
-	vkBuffers::copyVkBuffer(pApp, stagingBuffer, m_vkVertexBuffer, bufferSize, m_vkCommandPool);
+	vkHelpers::copyVkBuffer(pApp, stagingBuffer, m_vkVertexBuffer, bufferSize, m_vkCommandPool);
 
 	vkDestroyBuffer(pApp->getVkDevice(), stagingBuffer, nullptr);
 	vkFreeMemory(pApp->getVkDevice(), stagingBufferMemory, nullptr);
@@ -478,7 +482,7 @@ void csmntVkGraphics::createIndexBuffer(csmntVkApplication* pApp)
 
 	VkBuffer stagingBuffer;
 	VkDeviceMemory stagingBufferMemory;
-	vkBuffers::createVkBuffer(pApp->getVkDevice(), pApp->getVkPhysicalDevice(), bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
+	vkHelpers::createVkBuffer(pApp->getVkDevice(), pApp->getVkPhysicalDevice(), bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
 		| VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
 
 	void* data;
@@ -486,10 +490,10 @@ void csmntVkGraphics::createIndexBuffer(csmntVkApplication* pApp)
 	memcpy(data, indices.data(), (size_t)bufferSize);
 	vkUnmapMemory(pApp->getVkDevice(), stagingBufferMemory);
 
-	vkBuffers::createVkBuffer(pApp->getVkDevice(), pApp->getVkPhysicalDevice(), bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT
+	vkHelpers::createVkBuffer(pApp->getVkDevice(), pApp->getVkPhysicalDevice(), bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT
 		| VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_vkIndexBuffer, m_vkIndexBufferMemory);
 
-	vkBuffers::copyVkBuffer(pApp, stagingBuffer, m_vkIndexBuffer, bufferSize, m_vkCommandPool);
+	vkHelpers::copyVkBuffer(pApp, stagingBuffer, m_vkIndexBuffer, bufferSize, m_vkCommandPool);
 
 	vkDestroyBuffer(pApp->getVkDevice(), stagingBuffer, nullptr);
 	vkFreeMemory(pApp->getVkDevice(), stagingBufferMemory, nullptr);
@@ -502,7 +506,7 @@ void csmntVkGraphics::createUniformBuffers(csmntVkApplication* pApp) {
 	m_uniformBuffersMemory.resize(m_vkSwapChainImages.size());
 
 	for (size_t i = 0; i < m_vkSwapChainImages.size(); i++) {
-		vkBuffers::createVkBuffer(pApp->getVkDevice(), pApp->getVkPhysicalDevice(), bufferSize,
+		vkHelpers::createVkBuffer(pApp->getVkDevice(), pApp->getVkPhysicalDevice(), bufferSize,
 			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 
 			m_uniformBuffers[i], m_uniformBuffersMemory[i]);
 	}
@@ -699,6 +703,26 @@ void csmntVkGraphics::updateUniformBuffer(uint32_t currentImage, VkDevice& devic
 	vkMapMemory(device, m_uniformBuffersMemory[currentImage], 0, sizeof(ubo), 0, &data);
 	memcpy(data, &ubo, sizeof(ubo));
 	vkUnmapMemory(device, m_uniformBuffersMemory[currentImage]);
+}
+
+void csmntVkGraphics::createTexture(csmntVkApplication* pApp)
+{
+	m_pTexture = new Texture(pApp, m_vkCommandPool, "../Assets/Textures/profile.png", 4);
+
+	if (!m_pTexture)
+	{
+		std::runtime_error("failed to create the texture container!");
+	}
+}
+
+void csmntVkGraphics::cleanupTexture(csmntVkApplication* pApp)
+{
+	if (m_pTexture)
+	{
+		m_pTexture->cleanupTexture(pApp);
+		delete m_pTexture;
+		m_pTexture = nullptr;
+	}
 }
 
 void csmntVkGraphics::createDescriptorPool(VkDevice& device)

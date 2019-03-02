@@ -8,6 +8,7 @@
 
 #include "vkDetailsStructs.h"
 #include "Model.h"
+#include "Texture.h"
 
 //Graphics knows about Application, for passing params easier
 class csmntVkApplication;
@@ -24,15 +25,10 @@ public:
 	csmntVkGraphics(csmntVkGraphics&) = delete;
 	csmntVkGraphics& operator=(const csmntVkGraphics&) = delete;
 
-	void shutdown(VkDevice&);
+	void shutdown(csmntVkApplication*);
 
-	/*void initGraphicsModule(VkDevice&,VkPhysicalDevice&, VkSurfaceKHR&,
-							SwapChainSupportDetails&, GLFWwindow*);*/
 	void initGraphicsModule(csmntVkApplication*, SwapChainSupportDetails&);
 
-	/*void drawFrame(VkDevice&, VkQueue&, VkQueue&, VkPhysicalDevice&, 
-							VkSurfaceKHR&, SwapChainSupportDetails&, 
-							GLFWwindow*, bool&);*/
 	void drawFrame(csmntVkApplication*, SwapChainSupportDetails&);
 
 	void recreateSwapChain(csmntVkApplication*, SwapChainSupportDetails&);
@@ -72,8 +68,9 @@ private:
 	VkDescriptorPool			m_vkDescriptorPool;
 	std::vector<VkDescriptorSet> m_vkDescriptorSets;
 
-	//Models
+	//Models etc... for testing
 	Model*						m_pModel;
+	Texture*					m_pTexture;
 
 	void createSwapChain(csmntVkApplication*, SwapChainSupportDetails&);
 
@@ -92,6 +89,9 @@ private:
 	void createIndexBuffer(csmntVkApplication*);
 	void createUniformBuffers(csmntVkApplication*);
 	void updateUniformBuffer(uint32_t, VkDevice&);
+
+	void createTexture(csmntVkApplication*);
+	void cleanupTexture(csmntVkApplication*);
 
 	void createDescriptorPool(VkDevice&);
 	void createDescriptorSets(VkDevice&);
