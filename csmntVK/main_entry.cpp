@@ -11,22 +11,15 @@
 
 int main() {
 	//Create the application
-	csmntVkApplication* p_application = new csmntVkApplication(800, 600);
+	csmntVkApplication application(800, 600);
 
 	//Run the application
 	try {
-		p_application->run();
+		application.run();
 	}
 	catch (const std::exception& e) {
 		std::cerr << e.what() << std::endl;
 		return EXIT_FAILURE;
-	}
-
-	//cleanup
-	if (p_application)
-	{
-		delete p_application;
-		p_application = nullptr;
 	}
 
 	return EXIT_SUCCESS;

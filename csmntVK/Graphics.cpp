@@ -11,6 +11,7 @@
 #endif
 
 #include "Application.h"
+#include "vkBuffers.h"
 
 #define GLM_FORCE_RADIANS
 #include "../Libraries/glm/glm.hpp"
@@ -451,7 +452,7 @@ void csmntVkGraphics::createVertexBuffer(csmntVkApplication* pApp)
 	VkDeviceSize bufferSize = sizeof(verts[0]) * verts.size();
 	VkBuffer stagingBuffer;
 	VkDeviceMemory stagingBufferMemory;
-	createBuffer(pApp->getVkDevice(), pApp->getVkPhysicalDevice(), bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT 
+	vkBuffers::createVkBuffer(pApp->getVkDevice(), pApp->getVkPhysicalDevice(), bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT 
 		| VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
 
 	void* data;
@@ -459,9 +460,9 @@ void csmntVkGraphics::createVertexBuffer(csmntVkApplication* pApp)
 	memcpy(data, verts.data(), (size_t)bufferSize);
 	vkUnmapMemory(pApp->getVkDevice(), stagingBufferMemory);
 
-	createBuffer(pApp->getVkDevice(), pApp->getVkPhysicalDevice(), bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT
+	vkBuffers::createVkBuffer(pApp->getVkDevice(), pApp->getVkPhysicalDevice(), bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT
 		| VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_vkVertexBuffer, m_vkVertexBufferMemory);
-	copyBuffer(pApp, stagingBuffer, m_vkVertexBuffer, bufferSize);
+	vkBuffers::copyVkBuffer(pApp, stagingBuffer, m_vkVertexBuffer, bufferSize, m_vkCommandPool);
 
 	vkDestroyBuffer(pApp->getVkDevice(), stagingBuffer, nullptr);
 	vkFreeMemory(pApp->getVkDevice(), stagingBufferMemory, nullptr);
@@ -477,7 +478,7 @@ void csmntVkGraphics::createIndexBuffer(csmntVkApplication* pApp)
 
 	VkBuffer stagingBuffer;
 	VkDeviceMemory stagingBufferMemory;
-	createBuffer(pApp->getVkDevice(), pApp->getVkPhysicalDevice(), bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT 
+	vkBuffers::createVkBuffer(pApp->getVkDevice(), pApp->getVkPhysicalDevice(), bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
 		| VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
 
 	void* data;
@@ -485,10 +486,10 @@ void csmntVkGraphics::createIndexBuffer(csmntVkApplication* pApp)
 	memcpy(data, indices.data(), (size_t)bufferSize);
 	vkUnmapMemory(pApp->getVkDevice(), stagingBufferMemory);
 
-	createBuffer(pApp->getVkDevice(), pApp->getVkPhysicalDevice(), bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT
+	vkBuffers::createVkBuffer(pApp->getVkDevice(), pApp->getVkPhysicalDevice(), bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT
 		| VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_vkIndexBuffer, m_vkIndexBufferMemory);
 
-	copyBuffer(pApp, stagingBuffer, m_vkIndexBuffer, bufferSize);
+	vkBuffers::copyVkBuffer(pApp, stagingBuffer, m_vkIndexBuffer, bufferSize, m_vkCommandPool);
 
 	vkDestroyBuffer(pApp->getVkDevice(), stagingBuffer, nullptr);
 	vkFreeMemory(pApp->getVkDevice(), stagingBufferMemory, nullptr);
@@ -501,7 +502,7 @@ void csmntVkGraphics::createUniformBuffers(csmntVkApplication* pApp) {
 	m_uniformBuffersMemory.resize(m_vkSwapChainImages.size());
 
 	for (size_t i = 0; i < m_vkSwapChainImages.size(); i++) {
-		createBuffer(pApp->getVkDevice(), pApp->getVkPhysicalDevice(), bufferSize, 
+		vkBuffers::createVkBuffer(pApp->getVkDevice(), pApp->getVkPhysicalDevice(), bufferSize,
 			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 
 			m_uniformBuffers[i], m_uniformBuffersMemory[i]);
 	}
@@ -597,72 +598,6 @@ void csmntVkGraphics::createSemaphoresAndFences(VkDevice& device)
 			throw std::runtime_error("failed to create synchronization objects (semaphore or fence) for a frame!");
 		}
 	}
-}
-
-void csmntVkGraphics::createBuffer(VkDevice& device, VkPhysicalDevice& physicalDevice, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory)
-{
-	VkBufferCreateInfo bufferInfo = {};
-	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	bufferInfo.size = size;
-	bufferInfo.usage = usage;
-	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-	if (vkCreateBuffer(device, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
-		throw std::runtime_error("failed to create vertex buffer!");
-	}
-
-	//Allocate memory
-	VkMemoryRequirements memRequirements;
-	vkGetBufferMemoryRequirements(device, buffer, &memRequirements);
-
-	VkMemoryAllocateInfo allocInfo = {};
-	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-	allocInfo.allocationSize = memRequirements.size;
-	allocInfo.memoryTypeIndex = findMemoryType(physicalDevice,
-		memRequirements.memoryTypeBits,
-		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-
-	if (vkAllocateMemory(device, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS) {
-		throw std::runtime_error("failed to allocate vertex buffer memory!");
-	}
-
-	vkBindBufferMemory(device, buffer, bufferMemory, 0);
-}
-
-void csmntVkGraphics::copyBuffer(csmntVkApplication* pApp, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
-{
-	VkCommandBufferAllocateInfo allocInfo = {};
-	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-	allocInfo.commandPool = m_vkCommandPool;
-	allocInfo.commandBufferCount = 1;
-
-	VkCommandBuffer commandBuffer;
-	vkAllocateCommandBuffers(pApp->getVkDevice(), &allocInfo, &commandBuffer);
-
-	VkCommandBufferBeginInfo beginInfo = {};
-	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
-	vkBeginCommandBuffer(commandBuffer, &beginInfo);
-
-	VkBufferCopy copyRegion = {};
-	copyRegion.srcOffset = 0; // Optional
-	copyRegion.dstOffset = 0; // Optional
-	copyRegion.size = size;
-	vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
-
-	vkEndCommandBuffer(commandBuffer);
-
-	VkSubmitInfo submitInfo = {};
-	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-	submitInfo.commandBufferCount = 1;
-	submitInfo.pCommandBuffers = &commandBuffer;
-
-	vkQueueSubmit(pApp->getGraphicsQueue(), 1, &submitInfo, VK_NULL_HANDLE);
-	vkQueueWaitIdle(pApp->getGraphicsQueue());
-
-	vkFreeCommandBuffers(pApp->getVkDevice(), m_vkCommandPool, 1, &commandBuffer);
 }
 
 void csmntVkGraphics::drawFrame(csmntVkApplication* pApp, SwapChainSupportDetails& swapChainSupport)
@@ -966,20 +901,6 @@ VkShaderModule csmntVkGraphics::createShaderModule(const std::vector<char>& code
 	}
 
 	return shaderModule;
-}
-
-uint32_t csmntVkGraphics::findMemoryType(VkPhysicalDevice& physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties)
-{
-	VkPhysicalDeviceMemoryProperties memProperties;
-	vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
-
-	for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
-		if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
-			return i;
-		}
-	}
-
-	throw std::runtime_error("failed to find suitable memory type!");
 }
 
 VkSurfaceFormatKHR csmntVkGraphics::chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats)

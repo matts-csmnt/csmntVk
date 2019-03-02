@@ -99,17 +99,12 @@ private:
 	void createCommandBuffers(VkDevice&);
 	void createSemaphoresAndFences(VkDevice&);
 
-	void createBuffer(VkDevice&, VkPhysicalDevice&, VkDeviceSize, VkBufferUsageFlags, VkMemoryPropertyFlags, VkBuffer&, VkDeviceMemory&);
-	void copyBuffer(csmntVkApplication*, VkBuffer, VkBuffer, VkDeviceSize);
-
 	VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>&);
 	VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>);
 	VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR&, GLFWwindow*);
 
 	static std::vector<char> readFile(const std::string& filename);
 	VkShaderModule createShaderModule(const std::vector<char>& code, VkDevice*);
-
-	uint32_t findMemoryType(VkPhysicalDevice&, uint32_t, VkMemoryPropertyFlags);
 };
 
 #endif

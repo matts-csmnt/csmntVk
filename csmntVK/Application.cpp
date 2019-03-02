@@ -25,6 +25,9 @@ csmntVkApplication::csmntVkApplication(int winW, int winH)
 
 csmntVkApplication::~csmntVkApplication()
 {
+	//Cleanup application
+	shutdown();
+
 #if _DEBUG
 	std::cout << "HEY! csmntVK Application Destroyed" << std::endl;
 #endif
@@ -38,9 +41,6 @@ void csmntVkApplication::run()
 
 	//Run until error or closed
 	mainLoop();
-
-	//Cleanup application
-	shutdown();
 }
 
 void csmntVkApplication::mainLoop()

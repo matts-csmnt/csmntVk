@@ -76,7 +76,7 @@
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\VulkanSDK\1.1.97.0\Include;C:\Users\Matthew\Desktop\csmntVK_GIT_VER\Libraries\glfw-3.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\Matthew\Desktop\csmntVK_GIT_VER\Libraries\stb;C:\VulkanSDK\1.1.97.0\Include;C:\Users\Matthew\Desktop\csmntVK_GIT_VER\Libraries\glfw-3.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
@@ -90,7 +90,7 @@
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\VulkanSDK\1.1.97.0\Include;C:\Users\Matthew\Desktop\csmntVK_GIT_VER\Libraries\glfw-3.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\Matthew\Desktop\csmntVK_GIT_VER\Libraries\stb;C:\VulkanSDK\1.1.97.0\Include;C:\Users\Matthew\Desktop\csmntVK_GIT_VER\Libraries\glfw-3.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
@@ -106,7 +106,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\VulkanSDK\1.1.97.0\Include;C:\Users\Matthew\Desktop\csmntVK_GIT_VER\Libraries\glfw-3.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\Matthew\Desktop\csmntVK_GIT_VER\Libraries\stb;C:\VulkanSDK\1.1.97.0\Include;C:\Users\Matthew\Desktop\csmntVK_GIT_VER\Libraries\glfw-3.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
@@ -124,7 +124,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\VulkanSDK\1.1.97.0\Include;C:\Users\Matthew\Desktop\csmntVK_GIT_VER\Libraries\glfw-3.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\Matthew\Desktop\csmntVK_GIT_VER\Libraries\stb;C:\VulkanSDK\1.1.97.0\Include;C:\Users\Matthew\Desktop\csmntVK_GIT_VER\Libraries\glfw-3.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
@@ -139,12 +139,16 @@
     <ClCompile Include="Graphics.cpp" />
     <ClCompile Include="main_entry.cpp" />
     <ClCompile Include="Application.h" />
+    <ClCompile Include="Texture.cpp" />
+    <ClCompile Include="vkBuffers.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="defines.h" />
     <ClInclude Include="Graphics.h" />
     <ClInclude Include="Model.h" />
+    <ClInclude Include="Texture.h" />
     <ClInclude Include="uniformBuffer.h" />
+    <ClInclude Include="vkBuffers.h" />
     <ClInclude Include="vkDetailsStructs.h" />
   </ItemGroup>
   <ItemGroup>
