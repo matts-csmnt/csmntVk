@@ -21,6 +21,7 @@
 
 #include "uniformBuffer.h"
 
+#pragma region CTOR & DTOR
 csmntVkGraphics::csmntVkGraphics()
 {
 #if _DEBUG
@@ -33,6 +34,41 @@ csmntVkGraphics::~csmntVkGraphics()
 #if _DEBUG
 	std::cout << "HEY! csmntVK Graphics Module Destroyed" << std::endl;
 #endif
+}
+#pragma endregion
+
+#pragma region INIT & SHUTDOWN
+void csmntVkGraphics::initGraphicsModule(csmntVkApplication* pApp, SwapChainSupportDetails& swapChainSupport)
+{
+	//Create models
+	m_pModel = new Model();
+
+	//Create all required functionality for graphics pipeline
+	createSwapChain(pApp, swapChainSupport);
+	createImageViews(pApp->getVkDevice());
+
+	createRenderPass(pApp->getVkDevice());
+
+	createDescriptorSetLayout(pApp->getVkDevice());
+
+	createPipeline(pApp->getVkDevice());
+
+	createFramebuffers(pApp->getVkDevice());
+
+	createCommandPool(pApp->getVkDevice(), pApp->getVkPhysicalDevice(), pApp->getVkSurfaceKHR());
+
+	createVertexBuffer(pApp);
+	createIndexBuffer(pApp);
+	createUniformBuffers(pApp);
+
+	createDescriptorPool(pApp->getVkDevice());
+	createDescriptorSets(pApp->getVkDevice());
+
+	createCommandBuffers(pApp->getVkDevice());
+
+	createSemaphoresAndFences(pApp->getVkDevice());
+
+	createTexture(pApp);
 }
 
 void csmntVkGraphics::shutdown(csmntVkApplication* pApp)
@@ -72,40 +108,9 @@ void csmntVkGraphics::shutdown(csmntVkApplication* pApp)
 
 	cleanupTexture(pApp);
 }
+#pragma endregion
 
-void csmntVkGraphics::initGraphicsModule(csmntVkApplication* pApp, SwapChainSupportDetails& swapChainSupport)
-{
-	//Create models
-	m_pModel = new Model();
-
-	//Create all required functionality for graphics pipeline
-	createSwapChain(pApp, swapChainSupport);
-	createImageViews(pApp->getVkDevice());
-
-	createRenderPass(pApp->getVkDevice());
-
-	createDescriptorSetLayout(pApp->getVkDevice());
-
-	createPipeline(pApp->getVkDevice());
-
-	createFramebuffers(pApp->getVkDevice());
-
-	createCommandPool(pApp->getVkDevice(), pApp->getVkPhysicalDevice(), pApp->getVkSurfaceKHR());
-	
-	createVertexBuffer(pApp);
-	createIndexBuffer(pApp);
-	createUniformBuffers(pApp);
-
-	createDescriptorPool(pApp->getVkDevice());
-	createDescriptorSets(pApp->getVkDevice());
-
-	createCommandBuffers(pApp->getVkDevice());
-
-	createSemaphoresAndFences(pApp->getVkDevice());
-
-	createTexture(pApp);
-}
-
+#pragma region CREATIONS
 void csmntVkGraphics::createDescriptorSetLayout(VkDevice& device) 
 {
 	VkDescriptorSetLayoutBinding uboLayoutBinding = {};
@@ -162,8 +167,8 @@ void csmntVkGraphics::createDescriptorSets(VkDevice& device)
 
 void csmntVkGraphics::createPipeline(VkDevice& device)
 {
-	auto vertShaderCode = readFile("../Shaders/vert.spv");
-	auto fragShaderCode = readFile("../Shaders/frag.spv");
+	auto vertShaderCode = vkHelpers::readFile("../Shaders/vert.spv");
+	auto fragShaderCode = vkHelpers::readFile("../Shaders/frag.spv");
 
 	VkShaderModule vertShaderModule = createShaderModule(vertShaderCode, &device);
 	VkShaderModule fragShaderModule = createShaderModule(fragShaderCode, &device);
@@ -604,174 +609,6 @@ void csmntVkGraphics::createSemaphoresAndFences(VkDevice& device)
 	}
 }
 
-void csmntVkGraphics::drawFrame(csmntVkApplication* pApp, SwapChainSupportDetails& swapChainSupport)
-{
-	VkResult result;
-
-	//Wait for frame to finish before continuing with another
-	vkWaitForFences(pApp->getVkDevice(), 1, &m_vkInFlightFences[m_currentFrame], VK_TRUE, std::numeric_limits<uint64_t>::max());
-
-	uint32_t imageIndex;
-	result = vkAcquireNextImageKHR(pApp->getVkDevice(), m_vkSwapChain, std::numeric_limits<uint64_t>::max(), m_vkImageAvailableSemaphores[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
-
-	updateUniformBuffer(imageIndex, pApp->getVkDevice());
-
-	//check if swapchain needs recreation
-	if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-		pApp->setIsFrameBufferResized(false);
-
-		recreateSwapChain(pApp, swapChainSupport);
-		return;
-	}
-	else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-		throw std::runtime_error("failed to acquire swap chain image!");
-	}
-
-	//updateUniformBuffer(imageIndex, pApp->getVkDevice());
-
-	VkSubmitInfo submitInfo = {};
-	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-
-	VkSemaphore waitSemaphores[] = { m_vkImageAvailableSemaphores[m_currentFrame] };
-	VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-	submitInfo.waitSemaphoreCount = 1;
-	submitInfo.pWaitSemaphores = waitSemaphores;
-	submitInfo.pWaitDstStageMask = waitStages;
-
-	//bind command buffer
-	submitInfo.commandBufferCount = 1;
-	submitInfo.pCommandBuffers = &m_vkCommandBuffers[imageIndex];
-
-	VkSemaphore signalSemaphores[] = { m_vkRenderFinishedSemaphores[m_currentFrame] };
-	submitInfo.signalSemaphoreCount = 1;
-	submitInfo.pSignalSemaphores = signalSemaphores;
-
-	//Reset the fences after we check for swapchain recreation etc...
-	vkResetFences(pApp->getVkDevice(), 1, &m_vkInFlightFences[m_currentFrame]);
-
-	//submit queue and signal fence
-	if (vkQueueSubmit(pApp->getGraphicsQueue(), 1, &submitInfo, m_vkInFlightFences[m_currentFrame]) != VK_SUCCESS) {
-		throw std::runtime_error("failed to submit draw command buffer!");
-	}
-
-	//Present to swap chain
-	VkPresentInfoKHR presentInfo = {};
-	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-	presentInfo.waitSemaphoreCount = 1;
-	presentInfo.pWaitSemaphores = signalSemaphores;
-
-	VkSwapchainKHR swapChains[] = { m_vkSwapChain };
-	presentInfo.swapchainCount = 1;
-	presentInfo.pSwapchains = swapChains;
-	presentInfo.pImageIndices = &imageIndex;
-
-	//allows you to specify an array of VkResult values to check for every individual 
-	//swap chain if presentation was successful. It's not necessary if you're only using 
-	//a single swap chain, because you can simply use the return value of the present function
-	//(https://vulkan-tutorial.com/Drawing_a_triangle/Drawing/Rendering_and_presentation)
-	presentInfo.pResults = nullptr; // Optional
-
-	result = vkQueuePresentKHR(pApp->getPresentQueue(), &presentInfo);
-
-	//check swapchain again
-	if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || pApp->getIsFrameBufferResized()) {
-		pApp->setIsFrameBufferResized(false);
-		recreateSwapChain(pApp, swapChainSupport);
-	}
-	else if (result != VK_SUCCESS) {
-		throw std::runtime_error("failed to present swap chain image!");
-	}
-
-	//Advance frame
-	m_currentFrame = (m_currentFrame + 1) % m_MAX_FRAMES_IN_FLIGHT;
-}
-
-void csmntVkGraphics::updateUniformBuffer(uint32_t currentImage, VkDevice& device)
-{
-	static auto startTime = std::chrono::high_resolution_clock::now();
-
-	auto currentTime = std::chrono::high_resolution_clock::now();
-	float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
-
-	UniformBufferObject ubo = {};
-	ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-	ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-	ubo.proj = glm::perspective(glm::radians(45.0f), m_vkSwapChainExtent.width / (float)m_vkSwapChainExtent.height, 0.1f, 10.0f);
-	ubo.proj[1][1] *= -1;
-
-	void* data;
-	vkMapMemory(device, m_uniformBuffersMemory[currentImage], 0, sizeof(ubo), 0, &data);
-	memcpy(data, &ubo, sizeof(ubo));
-	vkUnmapMemory(device, m_uniformBuffersMemory[currentImage]);
-}
-
-void csmntVkGraphics::createTexture(csmntVkApplication* pApp)
-{
-	m_pTexture = new Texture(pApp, m_vkCommandPool, "../Assets/Textures/profile.png", 4);
-
-	if (!m_pTexture)
-	{
-		std::runtime_error("failed to create the texture container!");
-	}
-}
-
-void csmntVkGraphics::cleanupTexture(csmntVkApplication* pApp)
-{
-	if (m_pTexture)
-	{
-		m_pTexture->cleanupTexture(pApp);
-		delete m_pTexture;
-		m_pTexture = nullptr;
-	}
-}
-
-void csmntVkGraphics::createDescriptorPool(VkDevice& device)
-{
-	VkDescriptorPoolSize poolSize = {};
-	poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	poolSize.descriptorCount = static_cast<uint32_t>(m_vkSwapChainImages.size());
-
-	VkDescriptorPoolCreateInfo poolInfo = {};
-	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-	poolInfo.poolSizeCount = 1;
-	poolInfo.pPoolSizes = &poolSize;
-
-	poolInfo.maxSets = static_cast<uint32_t>(m_vkSwapChainImages.size());;
-
-	if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &m_vkDescriptorPool) != VK_SUCCESS) {
-		throw std::runtime_error("failed to create descriptor pool!");
-	}
-}
-
-void csmntVkGraphics::recreateSwapChain(csmntVkApplication* pApp, SwapChainSupportDetails& swapChainSupport)
-{
-	//Check for minimized window state
-	int width = 0, height = 0;
-	while (width == 0 || height == 0) {
-		glfwGetFramebufferSize(pApp->getWindow(), &width, &height);
-		glfwWaitEvents();
-	}
-
-	//Recreate the swap chain if window surface changes to non compatible
-	vkDeviceWaitIdle(pApp->getVkDevice());
-
-	//cleanup
-	cleanupSwapChain(pApp->getVkDevice());
-
-	createSwapChain(pApp, swapChainSupport);
-	createImageViews(pApp->getVkDevice());
-	createRenderPass(pApp->getVkDevice());
-	createPipeline(pApp->getVkDevice());
-	createFramebuffers(pApp->getVkDevice());
-	createCommandBuffers(pApp->getVkDevice());
-
-#if _DEBUG
-	static size_t creations = 0;
-	++creations;
-	std::cout << "HEY! recreated the swap chain [" << creations << " times]" << std::endl;
-#endif
-}
-
 void csmntVkGraphics::createSwapChain(csmntVkApplication* pApp, SwapChainSupportDetails& swapChainSupport)
 {
 	VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
@@ -872,6 +709,191 @@ void csmntVkGraphics::createImageViews(VkDevice& device)
 	}
 }
 
+void csmntVkGraphics::createDescriptorPool(VkDevice& device)
+{
+	VkDescriptorPoolSize poolSize = {};
+	poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	poolSize.descriptorCount = static_cast<uint32_t>(m_vkSwapChainImages.size());
+
+	VkDescriptorPoolCreateInfo poolInfo = {};
+	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+	poolInfo.poolSizeCount = 1;
+	poolInfo.pPoolSizes = &poolSize;
+
+	poolInfo.maxSets = static_cast<uint32_t>(m_vkSwapChainImages.size());;
+
+	if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &m_vkDescriptorPool) != VK_SUCCESS) {
+		throw std::runtime_error("failed to create descriptor pool!");
+	}
+}
+
+void csmntVkGraphics::createTexture(csmntVkApplication* pApp)
+{
+	m_pTexture = new Texture(pApp, m_vkCommandPool, "../Assets/Textures/profile.png", 4);
+
+	if (!m_pTexture)
+	{
+		std::runtime_error("failed to create the texture container!");
+	}
+}
+
+void csmntVkGraphics::recreateSwapChain(csmntVkApplication* pApp, SwapChainSupportDetails& swapChainSupport)
+{
+	//Check for minimized window state
+	int width = 0, height = 0;
+	while (width == 0 || height == 0) {
+		glfwGetFramebufferSize(pApp->getWindow(), &width, &height);
+		glfwWaitEvents();
+	}
+
+	//Recreate the swap chain if window surface changes to non compatible
+	vkDeviceWaitIdle(pApp->getVkDevice());
+
+	//cleanup
+	cleanupSwapChain(pApp->getVkDevice());
+
+	createSwapChain(pApp, swapChainSupport);
+	createImageViews(pApp->getVkDevice());
+	createRenderPass(pApp->getVkDevice());
+	createPipeline(pApp->getVkDevice());
+	createFramebuffers(pApp->getVkDevice());
+	createCommandBuffers(pApp->getVkDevice());
+
+#if _DEBUG
+	static size_t creations = 0;
+	++creations;
+	std::cout << "HEY! recreated the swap chain [" << creations << " times]" << std::endl;
+#endif
+}
+
+VkShaderModule csmntVkGraphics::createShaderModule(const std::vector<char>& code, VkDevice* device)
+{
+	VkShaderModuleCreateInfo createInfo = {};
+	createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+	createInfo.codeSize = code.size();
+	createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
+
+	VkShaderModule shaderModule;
+	if (vkCreateShaderModule(*device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
+		throw std::runtime_error("failed to create shader module!");
+	}
+
+	return shaderModule;
+}
+#pragma endregion
+
+#pragma region EVERY FRAME
+void csmntVkGraphics::drawFrame(csmntVkApplication* pApp, SwapChainSupportDetails& swapChainSupport)
+{
+	VkResult result;
+
+	//Wait for frame to finish before continuing with another
+	vkWaitForFences(pApp->getVkDevice(), 1, &m_vkInFlightFences[m_currentFrame], VK_TRUE, std::numeric_limits<uint64_t>::max());
+
+	uint32_t imageIndex;
+	result = vkAcquireNextImageKHR(pApp->getVkDevice(), m_vkSwapChain, std::numeric_limits<uint64_t>::max(), m_vkImageAvailableSemaphores[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
+
+	updateUniformBuffer(imageIndex, pApp->getVkDevice());
+
+	//check if swapchain needs recreation
+	if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+		pApp->setIsFrameBufferResized(false);
+
+		recreateSwapChain(pApp, swapChainSupport);
+		return;
+	}
+	else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+		throw std::runtime_error("failed to acquire swap chain image!");
+	}
+
+	VkSubmitInfo submitInfo = {};
+	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+
+	VkSemaphore waitSemaphores[] = { m_vkImageAvailableSemaphores[m_currentFrame] };
+	VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+	submitInfo.waitSemaphoreCount = 1;
+	submitInfo.pWaitSemaphores = waitSemaphores;
+	submitInfo.pWaitDstStageMask = waitStages;
+
+	//bind command buffer
+	submitInfo.commandBufferCount = 1;
+	submitInfo.pCommandBuffers = &m_vkCommandBuffers[imageIndex];
+
+	VkSemaphore signalSemaphores[] = { m_vkRenderFinishedSemaphores[m_currentFrame] };
+	submitInfo.signalSemaphoreCount = 1;
+	submitInfo.pSignalSemaphores = signalSemaphores;
+
+	//Reset the fences after we check for swapchain recreation etc...
+	vkResetFences(pApp->getVkDevice(), 1, &m_vkInFlightFences[m_currentFrame]);
+
+	//submit queue and signal fence
+	if (vkQueueSubmit(pApp->getGraphicsQueue(), 1, &submitInfo, m_vkInFlightFences[m_currentFrame]) != VK_SUCCESS) {
+		throw std::runtime_error("failed to submit draw command buffer!");
+	}
+
+	//Present to swap chain
+	VkPresentInfoKHR presentInfo = {};
+	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+	presentInfo.waitSemaphoreCount = 1;
+	presentInfo.pWaitSemaphores = signalSemaphores;
+
+	VkSwapchainKHR swapChains[] = { m_vkSwapChain };
+	presentInfo.swapchainCount = 1;
+	presentInfo.pSwapchains = swapChains;
+	presentInfo.pImageIndices = &imageIndex;
+
+	//allows you to specify an array of VkResult values to check for every individual 
+	//swap chain if presentation was successful. It's not necessary if you're only using 
+	//a single swap chain, because you can simply use the return value of the present function
+	//(https://vulkan-tutorial.com/Drawing_a_triangle/Drawing/Rendering_and_presentation)
+	presentInfo.pResults = nullptr; // Optional
+
+	result = vkQueuePresentKHR(pApp->getPresentQueue(), &presentInfo);
+
+	//check swapchain again
+	if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || pApp->getIsFrameBufferResized()) {
+		pApp->setIsFrameBufferResized(false);
+		recreateSwapChain(pApp, swapChainSupport);
+	}
+	else if (result != VK_SUCCESS) {
+		throw std::runtime_error("failed to present swap chain image!");
+	}
+
+	//Advance frame
+	m_currentFrame = (m_currentFrame + 1) % m_MAX_FRAMES_IN_FLIGHT;
+}
+
+void csmntVkGraphics::updateUniformBuffer(uint32_t currentImage, VkDevice& device)
+{
+	static auto startTime = std::chrono::high_resolution_clock::now();
+
+	auto currentTime = std::chrono::high_resolution_clock::now();
+	float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+
+	UniformBufferObject ubo = {};
+	ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+	ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+	ubo.proj = glm::perspective(glm::radians(45.0f), m_vkSwapChainExtent.width / (float)m_vkSwapChainExtent.height, 0.1f, 10.0f);
+	ubo.proj[1][1] *= -1;
+
+	void* data;
+	vkMapMemory(device, m_uniformBuffersMemory[currentImage], 0, sizeof(ubo), 0, &data);
+	memcpy(data, &ubo, sizeof(ubo));
+	vkUnmapMemory(device, m_uniformBuffersMemory[currentImage]);
+}
+#pragma endregion
+
+#pragma region CLEANUP
+void csmntVkGraphics::cleanupTexture(csmntVkApplication* pApp)
+{
+	if (m_pTexture)
+	{
+		m_pTexture->cleanupTexture(pApp);
+		delete m_pTexture;
+		m_pTexture = nullptr;
+	}
+}
+
 void csmntVkGraphics::cleanupSwapChain(VkDevice& device)
 {
 	//Destroy all framebuffers
@@ -893,40 +915,9 @@ void csmntVkGraphics::cleanupSwapChain(VkDevice& device)
 
 	vkDestroySwapchainKHR(device, m_vkSwapChain, nullptr);
 }
+#pragma endregion
 
-std::vector<char> csmntVkGraphics::readFile(const std::string & filename)
-{
-	std::ifstream file(filename, std::ios::ate | std::ios::binary);
-
-	if (!file.is_open()) {
-		throw std::runtime_error("failed to open file!");
-	}
-
-	size_t fileSize = (size_t)file.tellg();
-	std::vector<char> buffer(fileSize);
-
-	file.seekg(0);
-	file.read(buffer.data(), fileSize);
-	file.close();
-
-	return buffer;
-}
-
-VkShaderModule csmntVkGraphics::createShaderModule(const std::vector<char>& code, VkDevice* device)
-{
-	VkShaderModuleCreateInfo createInfo = {};
-	createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-	createInfo.codeSize = code.size();
-	createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
-
-	VkShaderModule shaderModule;
-	if (vkCreateShaderModule(*device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
-		throw std::runtime_error("failed to create shader module!");
-	}
-
-	return shaderModule;
-}
-
+#pragma region SWAP CHAIN HELPERS
 VkSurfaceFormatKHR csmntVkGraphics::chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats)
 {
 	//if vulkan finds no preferred format, use SRGB, BGRA 8
@@ -988,3 +979,4 @@ VkExtent2D csmntVkGraphics::chooseSwapExtent(const VkSurfaceCapabilitiesKHR & ca
 		return actualExtent;
 	}
 }
+#pragma endregion

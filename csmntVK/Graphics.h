@@ -103,7 +103,6 @@ private:
 	VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>);
 	VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR&, GLFWwindow*);
 
-	static std::vector<char> readFile(const std::string& filename);
 	VkShaderModule createShaderModule(const std::vector<char>& code, VkDevice*);
 };
 

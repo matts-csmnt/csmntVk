@@ -54,6 +54,10 @@ void Texture::createTextureImage(csmntVkApplication* pApp, VkCommandPool& cmdPoo
 	vkFreeMemory(pApp->getVkDevice(), stagingBufferMemory, nullptr);
 }
 
+void Texture::createTextureImageView()
+{
+}
+
 void Texture::cleanupTexture(csmntVkApplication* pApp)
 {
 	vkDestroyImage(pApp->getVkDevice(), m_textureImage, nullptr);
