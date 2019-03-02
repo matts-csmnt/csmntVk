@@ -57,7 +57,7 @@ void Texture::createTextureImage(csmntVkApplication* pApp, VkCommandPool& cmdPoo
 
 void Texture::createTextureImageView(VkDevice& device)
 {
-	m_textureImageView = vkHelpers::createVkImageView(device, m_textureImage, VK_FORMAT_R8G8B8A8_UNORM);
+	m_textureImageView = vkHelpers::createVkImageView(device, m_textureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT);
 }
 
 void Texture::cleanupTexture(csmntVkApplication* pApp)

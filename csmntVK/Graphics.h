@@ -74,6 +74,11 @@ private:
 
 	VkSampler					m_linearTexSampler;
 
+	//Depth Buffer
+	VkImage						m_vkDepthImage;
+	VkDeviceMemory				m_vkDepthImageMemory;
+	VkImageView					m_vkDepthImageView;
+
 	void createSwapChain(csmntVkApplication*, SwapChainSupportDetails&);
 
 	void createImageViews(VkDevice&);
@@ -83,7 +88,7 @@ private:
 	void createDescriptorSetLayout(VkDevice&);
 
 	void createPipeline(VkDevice&);
-	void createRenderPass(VkDevice&);
+	void createRenderPass(csmntVkApplication*);
 	void createFramebuffers(VkDevice&);
 	void createCommandPool(VkDevice&, VkPhysicalDevice&, VkSurfaceKHR&);
 	
@@ -93,6 +98,11 @@ private:
 	void updateUniformBuffer(uint32_t, VkDevice&);
 
 	void createTextureSampler(csmntVkApplication*);
+
+	//Depth Buffer
+	void createDepthResources(csmntVkApplication*);
+	void cleanupDepthResources(csmntVkApplication*);
+	VkFormat findDepthFormat(VkPhysicalDevice&);
 
 	void createTexture(csmntVkApplication*);
 	void cleanupTexture(csmntVkApplication*);

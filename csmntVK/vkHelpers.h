@@ -19,7 +19,10 @@ namespace vkHelpers {
 	void createVkImage(VkDevice& device, VkPhysicalDevice& physicalDevice, uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory);
 	void transitionVkImageLayout(csmntVkApplication* pApp, VkCommandPool& cmdPool, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout);
 	void copyBufferToVkImage(csmntVkApplication* pApp, VkCommandPool& cmdPool, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
-	VkImageView createVkImageView(VkDevice& device, VkImage image, VkFormat format);
+	VkImageView createVkImageView(VkDevice& device, VkImage image, VkFormat format, VkImageAspectFlags aspectFlags);
+
+	VkFormat findSupportedFormat(VkPhysicalDevice&, const std::vector<VkFormat>&, VkImageTiling, VkFormatFeatureFlags);
+	bool hasStencilComponent(VkFormat);
 
 	//File Reading
 	std::vector<char> readFile(const std::string & filename);

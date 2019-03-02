@@ -47,15 +47,18 @@ void csmntVkGraphics::initGraphicsModule(csmntVkApplication* pApp, SwapChainSupp
 	createSwapChain(pApp, swapChainSupport);
 	createImageViews(pApp->getVkDevice());
 
-	createRenderPass(pApp->getVkDevice());
+	createRenderPass(pApp);
 
 	createDescriptorSetLayout(pApp->getVkDevice());
 
 	createPipeline(pApp->getVkDevice());
 
-	createFramebuffers(pApp->getVkDevice());
-
 	createCommandPool(pApp->getVkDevice(), pApp->getVkPhysicalDevice(), pApp->getVkSurfaceKHR());
+
+	//Depth Buffer
+	createDepthResources(pApp);
+
+	createFramebuffers(pApp->getVkDevice());
 
 	//Textures
 	createTexture(pApp);
@@ -341,6 +344,16 @@ void csmntVkGraphics::createPipeline(VkDevice& device)
 	dynamicState.dynamicStateCount = 2;
 	dynamicState.pDynamicStates = dynamicStates;*/
 
+	//Depth Stencil
+	VkPipelineDepthStencilStateCreateInfo depthStencil = {};
+	depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+	depthStencil.depthTestEnable = VK_TRUE;
+	depthStencil.depthWriteEnable = VK_TRUE;
+	depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+	depthStencil.depthBoundsTestEnable = VK_FALSE;
+	depthStencil.minDepthBounds = 0.0f; // Optional
+	depthStencil.maxDepthBounds = 1.0f; // Optional
+
 	//Pipeline Layout
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
 	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -364,7 +377,7 @@ void csmntVkGraphics::createPipeline(VkDevice& device)
 	pipelineInfo.pViewportState = &viewportState;
 	pipelineInfo.pRasterizationState = &rasterizer;
 	pipelineInfo.pMultisampleState = &multisampling;
-	pipelineInfo.pDepthStencilState = nullptr; // Optional
+	pipelineInfo.pDepthStencilState = &depthStencil;
 	pipelineInfo.pColorBlendState = &colorBlending;
 	pipelineInfo.pDynamicState = nullptr; // Optional
 
@@ -385,7 +398,7 @@ void csmntVkGraphics::createPipeline(VkDevice& device)
 	vkDestroyShaderModule(device, vertShaderModule, nullptr);
 }
 
-void csmntVkGraphics::createRenderPass(VkDevice& device)
+void csmntVkGraphics::createRenderPass(csmntVkApplication* pApp)
 {
 	VkAttachmentDescription colorAttachment = {};
 	colorAttachment.format = m_vkSwapChainImageFormat;
@@ -404,11 +417,6 @@ void csmntVkGraphics::createRenderPass(VkDevice& device)
 	colorAttachmentRef.attachment = 0;
 	colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-	VkSubpassDescription subpass = {};
-	subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-	subpass.colorAttachmentCount = 1;
-	subpass.pColorAttachments = &colorAttachmentRef;
-
 	//Subpass Dependency - make the render pass wait for the VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT stage
 	VkSubpassDependency dependency = {};
 	dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
@@ -418,18 +426,40 @@ void csmntVkGraphics::createRenderPass(VkDevice& device)
 	dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 	dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
+	//Depth
+	VkAttachmentDescription depthAttachment = {};
+	depthAttachment.format = findDepthFormat(pApp->getVkPhysicalDevice());
+	depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+	depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+	depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+	depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+	depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+	depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+	VkAttachmentReference depthAttachmentRef = {};
+	depthAttachmentRef.attachment = 1;
+	depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+	//Subpass
+	VkSubpassDescription subpass = {};
+	subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+	subpass.colorAttachmentCount = 1;
+	subpass.pColorAttachments = &colorAttachmentRef;
+	subpass.pDepthStencilAttachment = &depthAttachmentRef;
+
 	//Create the pass
+	std::array<VkAttachmentDescription, 2> attachments = { colorAttachment, depthAttachment };
 	VkRenderPassCreateInfo renderPassInfo = {};
 	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-	renderPassInfo.attachmentCount = 1;
-	renderPassInfo.pAttachments = &colorAttachment;
+	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+	renderPassInfo.pAttachments = attachments.data();
 	renderPassInfo.subpassCount = 1;
 	renderPassInfo.pSubpasses = &subpass;
-
 	renderPassInfo.dependencyCount = 1;
 	renderPassInfo.pDependencies = &dependency;
 
-	if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &m_vkRenderPass) != VK_SUCCESS) {
+	if (vkCreateRenderPass(pApp->getVkDevice(), &renderPassInfo, nullptr, &m_vkRenderPass) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create render pass!");
 	}
 }
@@ -439,15 +469,17 @@ void csmntVkGraphics::createFramebuffers(VkDevice& device)
 	m_vkSwapChainFramebuffers.resize(m_vkSwapChainImageViews.size());
 
 	for (size_t i = 0; i < m_vkSwapChainImageViews.size(); i++) {
-		VkImageView attachments[] = {
-			m_vkSwapChainImageViews[i]
+		
+		std::array<VkImageView, 2> attachments = {
+			m_vkSwapChainImageViews[i],
+			m_vkDepthImageView
 		};
 
 		VkFramebufferCreateInfo framebufferInfo = {};
 		framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 		framebufferInfo.renderPass = m_vkRenderPass;
-		framebufferInfo.attachmentCount = 1;
-		framebufferInfo.pAttachments = attachments;
+		framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+		framebufferInfo.pAttachments = attachments.data();
 		framebufferInfo.width = m_vkSwapChainExtent.width;
 		framebufferInfo.height = m_vkSwapChainExtent.height;
 		framebufferInfo.layers = 1;
@@ -548,6 +580,11 @@ void csmntVkGraphics::createCommandBuffers(VkDevice& device)
 {
 	m_vkCommandBuffers.resize(m_vkSwapChainFramebuffers.size());
 
+	//Clear values
+	std::array<VkClearValue, 2> clearValues = {};
+	clearValues[0].color = { 0.0f, 0.0f, 0.0f, 1.0f };
+	clearValues[1].depthStencil = { 1.0f, 0 };
+
 	VkCommandBufferAllocateInfo allocInfo = {};
 	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 	allocInfo.commandPool = m_vkCommandPool;
@@ -583,10 +620,9 @@ void csmntVkGraphics::createCommandBuffers(VkDevice& device)
 		renderPassInfo.renderArea.offset = { 0, 0 };
 		renderPassInfo.renderArea.extent = m_vkSwapChainExtent;
 
-		//Clear to Black
-		VkClearValue clearColor = { 0.0f, 0.0f, 0.0f, 1.0f };
-		renderPassInfo.clearValueCount = 1;
-		renderPassInfo.pClearValues = &clearColor;
+		//Clear to clear values
+		renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+		renderPassInfo.pClearValues = clearValues.data();
 
 		vkCmdBeginRenderPass(m_vkCommandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
@@ -713,7 +749,7 @@ void csmntVkGraphics::createImageViews(VkDevice& device)
 	//Iterate over all images 
 	for (size_t i = 0; i < m_vkSwapChainImageViews.size(); i++) 
 	{
-		m_vkSwapChainImageViews[i] = vkHelpers::createVkImageView(device, m_vkSwapChainImages[i], m_vkSwapChainImageFormat);
+		m_vkSwapChainImageViews[i] = vkHelpers::createVkImageView(device, m_vkSwapChainImages[i], m_vkSwapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
 	}
 }
 
@@ -765,8 +801,9 @@ void csmntVkGraphics::recreateSwapChain(csmntVkApplication* pApp, SwapChainSuppo
 
 	createSwapChain(pApp, swapChainSupport);
 	createImageViews(pApp->getVkDevice());
-	createRenderPass(pApp->getVkDevice());
+	createRenderPass(pApp);
 	createPipeline(pApp->getVkDevice());
+	createDepthResources(pApp);
 	createFramebuffers(pApp->getVkDevice());
 	createCommandBuffers(pApp->getVkDevice());
 
@@ -816,6 +853,17 @@ void csmntVkGraphics::createTextureSampler(csmntVkApplication* pApp)
 	if (vkCreateSampler(pApp->getVkDevice(), &samplerInfo, nullptr, &m_linearTexSampler) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create texture sampler!");
 	}
+}
+
+void csmntVkGraphics::createDepthResources(csmntVkApplication* pApp)
+{
+	VkFormat depthFormat = findDepthFormat(pApp->getVkPhysicalDevice());
+
+	vkHelpers::createVkImage(pApp->getVkDevice(), pApp->getVkPhysicalDevice(),
+		m_vkSwapChainExtent.width, m_vkSwapChainExtent.height, depthFormat,
+		VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 
+		m_vkDepthImage, m_vkDepthImageMemory);
+	m_vkDepthImageView = vkHelpers::createVkImageView(pApp->getVkDevice(), m_vkDepthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
 }
 #pragma endregion
 
@@ -933,6 +981,11 @@ void csmntVkGraphics::cleanupTexture(csmntVkApplication* pApp)
 
 void csmntVkGraphics::cleanupSwapChain(VkDevice& device)
 {
+	//cleanup depth buffer
+	vkDestroyImageView(device, m_vkDepthImageView, nullptr);
+	vkDestroyImage(device, m_vkDepthImage, nullptr);
+	vkFreeMemory(device, m_vkDepthImageMemory, nullptr);
+
 	//Destroy all framebuffers
 	for (auto framebuffer : m_vkSwapChainFramebuffers) {
 		vkDestroyFramebuffer(device, framebuffer, nullptr);
@@ -1015,5 +1068,17 @@ VkExtent2D csmntVkGraphics::chooseSwapExtent(const VkSurfaceCapabilitiesKHR & ca
 
 		return actualExtent;
 	}
+}
+#pragma endregion
+
+#pragma region DEPTH BUFFER HELPERS
+VkFormat csmntVkGraphics::findDepthFormat(VkPhysicalDevice& physicalDevice) 
+{
+	return vkHelpers::findSupportedFormat(
+		physicalDevice,
+		{ VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
+		VK_IMAGE_TILING_OPTIMAL,
+		VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
+	);
 }
 #pragma endregion
