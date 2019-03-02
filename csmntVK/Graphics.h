@@ -72,6 +72,8 @@ private:
 	Model*						m_pModel;
 	Texture*					m_pTexture;
 
+	VkSampler					m_linearTexSampler;
+
 	void createSwapChain(csmntVkApplication*, SwapChainSupportDetails&);
 
 	void createImageViews(VkDevice&);
@@ -89,6 +91,8 @@ private:
 	void createIndexBuffer(csmntVkApplication*);
 	void createUniformBuffers(csmntVkApplication*);
 	void updateUniformBuffer(uint32_t, VkDevice&);
+
+	void createTextureSampler(csmntVkApplication*);
 
 	void createTexture(csmntVkApplication*);
 	void cleanupTexture(csmntVkApplication*);

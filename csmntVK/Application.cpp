@@ -9,6 +9,7 @@
 #include "vkDetailsStructs.h"
 #endif
 
+#pragma region CTOR & DTOR
 csmntVkApplication::csmntVkApplication(int winW, int winH)
 	: m_winW(winW), m_winH(winH), m_pWindow(nullptr)
 {
@@ -32,6 +33,7 @@ csmntVkApplication::~csmntVkApplication()
 	std::cout << "HEY! csmntVK Application Destroyed" << std::endl;
 #endif
 }
+#pragma endregion
 
 void csmntVkApplication::run()
 {
@@ -313,7 +315,7 @@ bool csmntVkApplication::isDeviceSuitable(VkPhysicalDevice device)
 		swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
 	}
 
-	return indices.isComplete() && extensionsSupported && swapChainAdequate;
+	return indices.isComplete() && extensionsSupported && swapChainAdequate && deviceFeatures.samplerAnisotropy;
 }
 
 void csmntVkApplication::createLogicalDevice()
@@ -340,6 +342,9 @@ void csmntVkApplication::createLogicalDevice()
 	//Features (queried before with vkGetPhysicalDeviceFeatures)
 	//No features required just yet
 	VkPhysicalDeviceFeatures deviceFeatures = {};
+
+	//request anistropy
+	deviceFeatures.samplerAnisotropy = VK_TRUE;
 
 	//Create the logical device
 	VkDeviceCreateInfo createInfo = {};

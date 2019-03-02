@@ -11,7 +11,7 @@ public:
 
 	void cleanupTexture(csmntVkApplication*);
 	void createTextureImage(csmntVkApplication*, VkCommandPool&, const char*, const int);
-	void createTextureImageView();
+	void createTextureImageView(VkDevice&);
 
 private:
 	VkImage			m_textureImage;

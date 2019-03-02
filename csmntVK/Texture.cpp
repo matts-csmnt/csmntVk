@@ -54,12 +54,14 @@ void Texture::createTextureImage(csmntVkApplication* pApp, VkCommandPool& cmdPoo
 	vkFreeMemory(pApp->getVkDevice(), stagingBufferMemory, nullptr);
 }
 
-void Texture::createTextureImageView()
+void Texture::createTextureImageView(VkDevice& device)
 {
+	m_textureImageView = vkHelpers::createVkImageView(device, m_textureImage, VK_FORMAT_R8G8B8A8_UNORM);
 }
 
 void Texture::cleanupTexture(csmntVkApplication* pApp)
 {
+	vkDestroyImageView(pApp->getVkDevice(), m_textureImageView, nullptr);
 	vkDestroyImage(pApp->getVkDevice(), m_textureImage, nullptr);
 	vkFreeMemory(pApp->getVkDevice(), m_textureImageMemory, nullptr);
 }

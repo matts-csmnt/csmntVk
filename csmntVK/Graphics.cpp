@@ -69,6 +69,8 @@ void csmntVkGraphics::initGraphicsModule(csmntVkApplication* pApp, SwapChainSupp
 	createSemaphoresAndFences(pApp->getVkDevice());
 
 	createTexture(pApp);
+
+	createTextureSampler(pApp);
 }
 
 void csmntVkGraphics::shutdown(csmntVkApplication* pApp)
@@ -105,6 +107,8 @@ void csmntVkGraphics::shutdown(csmntVkApplication* pApp)
 		delete m_pModel;
 		m_pModel = nullptr;
 	}
+
+	vkDestroySampler(pApp->getVkDevice(), m_linearTexSampler, nullptr);
 
 	cleanupTexture(pApp);
 }
@@ -684,28 +688,9 @@ void csmntVkGraphics::createImageViews(VkDevice& device)
 	m_vkSwapChainImageViews.resize(m_vkSwapChainImages.size());
 
 	//Iterate over all images 
-	for (size_t i = 0; i < m_vkSwapChainImageViews.size(); i++) {
-		//2d image view types
-		VkImageViewCreateInfo createInfo = {};
-		createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-		createInfo.image = m_vkSwapChainImages[i];
-		createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-		createInfo.format = m_vkSwapChainImageFormat;
-
-		createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-		createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-		createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-		createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-
-		createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		createInfo.subresourceRange.baseMipLevel = 0;
-		createInfo.subresourceRange.levelCount = 1;
-		createInfo.subresourceRange.baseArrayLayer = 0;
-		createInfo.subresourceRange.layerCount = 1;
-
-		if (vkCreateImageView(device, &createInfo, nullptr, &m_vkSwapChainImageViews[i]) != VK_SUCCESS) {
-			throw std::runtime_error("failed to create image views!");
-		}
+	for (size_t i = 0; i < m_vkSwapChainImageViews.size(); i++) 
+	{
+		m_vkSwapChainImageViews[i] = vkHelpers::createVkImageView(device, m_vkSwapChainImages[i], m_vkSwapChainImageFormat);
 	}
 }
 
@@ -779,6 +764,32 @@ VkShaderModule csmntVkGraphics::createShaderModule(const std::vector<char>& code
 	}
 
 	return shaderModule;
+}
+
+void csmntVkGraphics::createTextureSampler(csmntVkApplication* pApp)
+{
+	//Create a linear sampler w/Anistro
+	VkSamplerCreateInfo samplerInfo = {};
+	samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+	samplerInfo.magFilter = VK_FILTER_LINEAR;
+	samplerInfo.minFilter = VK_FILTER_LINEAR;
+	samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+	samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+	samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+	samplerInfo.anisotropyEnable = VK_TRUE;
+	samplerInfo.maxAnisotropy = 16;
+	samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+	samplerInfo.unnormalizedCoordinates = VK_FALSE;
+	samplerInfo.compareEnable = VK_FALSE;
+	samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+	samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+	samplerInfo.mipLodBias = 0.0f;
+	samplerInfo.minLod = 0.0f;
+	samplerInfo.maxLod = 0.0f;
+
+	if (vkCreateSampler(pApp->getVkDevice(), &samplerInfo, nullptr, &m_linearTexSampler) != VK_SUCCESS) {
+		throw std::runtime_error("failed to create texture sampler!");
+	}
 }
 #pragma endregion
 
